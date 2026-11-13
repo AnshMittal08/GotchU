@@ -1,6 +1,8 @@
 # GotchU product plan - what makes it worth using
 
-Status: proposal, 2026-11-13. Not agreed yet. ROADMAP.md stays as it is until the owner says yes.
+Status: agreed with the owner on 2026-11-13. Phases A and B are built, and the decoy half of C.
+The product was named GotchU on 2026-11-13 (working name before that: pcguard); the command is `gotchu`.
+Progress is tracked in ROADMAP.md; this file holds the reasoning.
 
 ## 1. The idea in one line
 
@@ -78,19 +80,28 @@ Limits we state openly in the product:
 
 Each phase has a check that proves it works and a rule for dropping or changing it.
 
-### A. Exposure report (read-only)
+### A. Exposure report (read-only) - done
 - Build: secrets map v1 as a data file; `gotchu exposure` counts saved passwords, signed-in sites, key
   files, messenger sessions, wallets, cloud logins. Counts and locations only, never the values.
 - Proves it works: counts match what we know was on this PC; a test with a fake profile.
 - Drop rule: none; `respond` needs the same inventory.
 
-### B. Fake thief and scorecard
+### B. Fake thief and scorecard - done, folded into A
+- As built: not a separate program. `gotchu exposure` opens each store for one byte, as an ordinary
+  program would, and reports how many of them a thief could read today.
 - Build: a harmless program that tries to open every place in the secrets map and reports "could read"
   or "blocked". It copies nothing, decrypts nothing and never touches the network.
 - Proves it works: it reads everything on an unprotected PC.
 - Use: every later claim is measured with it.
 
-### C. Decoys and tripwire
+### C. Decoys and tripwire - decoys done, real stores next
+- As built: `gotchu tripwire` plants four decoy wallet files (only for apps that are not installed). A
+  watcher in Program Files, started at sign-in with administrator rights, shows an alarm when one is read
+  and, with `--cut`, blocks that program from the internet. Owner's choice: start alert-only, then cut.
+- Verified live on Windows 11 Home with a renamed copy of curl: alarm logged, that program lost its
+  internet, other programs kept theirs; `--off` removed everything it had added.
+- Still to do: watch the real browser, Telegram and Discord stores once false alarms are measured; a page
+  in the window; decoys that are not wallets.
 - First, test on this PC whether Windows Home records file reads (`auditpol`, event 4663). Guides say it
   does; a Microsoft forum thread reports cases where the event never appears. One permission prompt, one
   setting, with undo.
@@ -136,12 +147,12 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 | Over-claiming | Scorecard from the fake thief is published; the limits in section 4 are shown in the product |
 | A big vendor copies it | Likely for single features. The map, playbooks and open scorecard are what stay ours |
 
-## 7. Decisions for the owner
+## 7. Decisions for the owner (answered 2026-11-13)
 
-1. Agree the thesis: "guard the safe" as the centre, with hardening and checking as supporting parts?
-2. Build order A to G as above? (My recommendation: yes; A and B first, both read-only.)
-3. Allow the phase C test on this laptop (one permission prompt, undoable)?
-4. Online decoys (Canarytokens) send an alert through a third party. Offer as opt-in, or leave out?
+1. Agree the thesis: "guard the safe" as the centre, with hardening and checking as supporting parts? **Yes.**
+2. Build order A to G as above? **Yes.**
+3. Allow the phase C test on this laptop (one permission prompt, undoable)? **Yes; it passed.**
+4. Online decoys (Canarytokens) send an alert through a third party. Offer as opt-in, or leave out? **Not answered; treated as opt-in.**
 
 ## Sources
 
