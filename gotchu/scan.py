@@ -122,7 +122,8 @@ def _sideload_findings(snap):
         try:
             if len(os.listdir(folder)) > 300:
                 continue
-            findings += [f for f in check.analyse(folder) if f[0] == HIGH and "untrusted DLL" in f[1]]
+            # A planted DLL sits beside the program, so the folder itself is enough - not every subfolder.
+            findings += [f for f in check.analyse(folder, recursive=False) if f[0] == HIGH and "untrusted DLL" in f[1]]
         except OSError:
             pass
     return [(s, f"Running now: {t}", d) for s, t, d in findings]

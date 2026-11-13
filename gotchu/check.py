@@ -68,8 +68,10 @@ def _zip_members(path):
         yield Member(zi.filename, zi.file_size, zi.compress_size, reader)
 
 
-def _dir_members(path):
-    for root, _, files in os.walk(path):
+def _dir_members(path, recursive=True):
+    for root, dirs, files in os.walk(path):
+        if not recursive:
+            dirs[:] = []
         for fn in files:
             full = os.path.join(root, fn)
 
@@ -80,9 +82,9 @@ def _dir_members(path):
             yield Member(os.path.relpath(full, path), os.path.getsize(full), None, reader)
 
 
-def members(path):
+def members(path, recursive=True):
     if os.path.isdir(path):
-        return list(_dir_members(path))
+        return list(_dir_members(path, recursive))
     if zipfile.is_zipfile(path):
         return list(_zip_members(path))
     size = os.path.getsize(path)
@@ -122,10 +124,10 @@ def sha256(path):
     return h.hexdigest()
 
 
-def analyse(path):
-    """Return a list of (severity, title, detail) findings for `path`."""
+def analyse(path, recursive=True):
+    """Return a list of (severity, title, detail) findings for `path` (a folder's subfolders too, if recursive)."""
     findings = []
-    items = members(path)
+    items = members(path, recursive)
 
     def add(sev, title, detail):
         findings.append((sev, title, detail))

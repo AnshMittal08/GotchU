@@ -44,6 +44,15 @@ class CheckTests(unittest.TestCase):
         self.assertTrue(any("disguised" in t for _, t in found))
         self.assertTrue(any("Shortcut" in t for _, t in found))
 
+    def test_a_folder_can_be_checked_without_its_subfolders(self):
+        os.makedirs(os.path.join(self.tmp.name, "app", "resources"))
+        for name in ("app/app.exe", "app/resources/data.bin"):
+            with open(os.path.join(self.tmp.name, name), "wb") as f:
+                f.write(b"MZ")
+        folder = os.path.join(self.tmp.name, "app")
+        self.assertEqual([m.name for m in check.members(folder, recursive=False)], ["app.exe"])
+        self.assertEqual(len(check.members(folder)), 2)
+
     def test_ordinary_zip_passes(self):
         path = make_zip(self.tmp.name, "notes.zip", {
             "readme.txt": b"hello " * 1000,

@@ -1,8 +1,10 @@
+import json
 import os
 import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from gotchu import vault
 
@@ -41,6 +43,22 @@ class VaultTests(unittest.TestCase):
             blob.write_bytes(bytes(data))
             with self.assertRaises(vault.WrongSecret):                       # tampering is detected
                 vault.get(key, "server.pem", folder)
+
+    def test_a_vault_from_before_the_stronger_setting_opens_and_is_upgraded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = os.path.join(tmp, "vault")
+            with mock.patch.object(vault, "SCRYPT", vault.LEGACY_SCRYPT):
+                recovery = vault.create("correct horse battery", folder)
+            header_file = pathlib.Path(folder, "vault.json")
+            header = json.loads(header_file.read_text())
+            for slot in ("passphrase", "recovery"):
+                del header[slot]["scrypt"]                                   # earlier versions did not store it
+            header_file.write_text(json.dumps(header))
+
+            key = vault.unlock("correct horse battery", folder)
+            self.assertEqual(json.loads(header_file.read_text())["passphrase"]["scrypt"], vault.SCRYPT)
+            self.assertEqual(vault.unlock("correct horse battery", folder), key)
+            self.assertEqual(vault.unlock(recovery, folder), key)           # the recovery slot is left as it was
 
 
 if __name__ == "__main__":
