@@ -1,6 +1,9 @@
+import os
+import tempfile
 import unittest
 
 from gotchu import report, tripwire
+from tests.test_exposure import fake_profile
 
 ALERT = {"time": "2026-11-13T10:00:00", "program": r"C:\Users\A\AppData\Local\Temp\x.exe", "file": "f", "cut": True}
 
@@ -13,10 +16,18 @@ class TripwireTests(unittest.TestCase):
         self.assertNotIn(installed, [root for root, _ in planned])
 
     def test_levels(self):
-        state = {"on": True, "cut": True, "decoys": ["f"], "alerts": []}
+        state = {"on": True, "cut": True, "decoys": ["f"], "stores": [], "alerts": [], "sightings": []}
         self.assertEqual(report.level(tripwire.analyse(state)), "ok")
         self.assertEqual(report.level(tripwire.analyse({**state, "alerts": [ALERT]})), "danger")
         self.assertEqual(report.level(tripwire.analyse({**state, "on": False})), "warn")
+        sighting = {"time": "2026-11-13T10:00:00", "program": r"C:\Tools\backup.exe", "store": "Google Chrome", "file": "f"}
+        self.assertEqual(report.level(tripwire.analyse({**state, "sightings": [sighting]})), "warn")
+
+    def test_only_stores_with_a_known_owner_are_watched(self):
+        with tempfile.TemporaryDirectory() as home:
+            watched = tripwire.guarded(fake_profile(home))
+            self.assertEqual(sorted(os.path.basename(w["path"]) for w in watched), ["Cookies", "Login Data"])
+            self.assertTrue(all(w["owners"] == ["chrome.exe"] and w["signer"] == "Google LLC" for w in watched))
 
 
 if __name__ == "__main__":

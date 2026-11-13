@@ -21,7 +21,7 @@ Status: early. It works on the author's Windows 11 Home PC; it has not been test
 | `gotchu scan` | Am I infected right now? Looks at running programs and what starts with Windows. |
 | `gotchu exposure` | What could a thief take from this PC today? Counts saved passwords, sessions, keys and wallets. Never shows or copies one. |
 | `gotchu harden` | Which Windows protections are off? Turns four of them on, saving the old setting so `--undo` is exact. |
-| `gotchu tripwire` | Plants decoy wallet files no honest program opens. When one is read you get an alarm, and with `--cut` that program loses its internet. |
+| `gotchu tripwire` | Plants decoy wallet files no honest program opens. When one is read you get an alarm, and with `--cut` that program loses its internet. It also lists any program, other than the owner, that reads your browser, Telegram or Discord logins. |
 | `gotchu vault` | Keeps key files encrypted with a passphrase, so a stolen copy is useless. `vault use` hands a key to one command and removes it afterwards. |
 | `gotchu ui` | A local window for check, scan, exposure and harden. |
 
@@ -50,8 +50,8 @@ To help, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a weakness, see [SECU
 - **Local.** Nothing leaves your PC. No account.
 - **Read-only unless you say so.** A change needs your yes and a Windows permission prompt, and can be undone.
 - **Plain language.** Every finding says what was seen, why it matters and what to do.
-- **Honest limits.** No tool stops every attack. The tripwire catches a thief that sweeps for wallets, not
-  every thief; a patient attacker with administrator rights can switch any tool off. The vault protects
+- **Honest limits.** No tool stops every attack. The tripwire raises its alarm for decoys only; reads of real
+  login stores are listed for review, not yet alarmed; a patient attacker with administrator rights can switch any tool off. The vault protects
   files at rest: a file you have taken out is an ordinary file again, and if you lose both the passphrase
   and the recovery key, the files are gone.
 

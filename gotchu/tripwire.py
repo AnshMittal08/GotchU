@@ -4,8 +4,12 @@ Info-stealers sweep the same list of wallet folders on every PC. gotchu plants f
 for apps that are not installed), asks Windows to record who reads them, and a small watcher
 raises the alarm - and, if chosen, blocks that program from the internet.
 
-Limits, stated plainly: it catches a thief that sweeps for wallets, not one that takes only
-browser data; and the internet block applies to the program that did the reading.
+It also watches the real stores that have a known owner (browser logins and sessions, Telegram,
+Discord). A read by any other program is written down for review. That part does not raise an
+alarm yet: first we measure how often honest programs do it.
+
+Limits, stated plainly: the alarm fires for decoys only; the internet block applies to the
+program that did the reading; malware that injects itself into the real browser looks like the owner.
 """
 import json
 import os
@@ -36,6 +40,38 @@ def plan(appdata, exists=os.path.exists):
         root = root.replace("%APPDATA%", appdata)
         if not exists(root):
             out.append((root, os.path.join(root, file)))
+    return out
+
+
+CHROMIUM_FILES = ("Login Data", os.path.join("Network", "Cookies"), "Web Data")
+FIREFOX_FILES = ("logins.json", "key4.db", "cookies.sqlite")
+
+
+def guarded(env=None, secrets=None):
+    """Real stores worth watching: only those with a known owner, so a read by anyone else means something."""
+    from . import exposure   # imported here: exposure imports this module
+    env = os.environ if env is None else env
+    secrets = secrets or exposure.load_map()
+    out = []
+    for b in secrets["browsers"]:
+        root = exposure.expand(b["root"], env)
+        if not os.path.isdir(root):
+            continue
+        firefox = b["engine"] == "firefox"
+        folders = [p.path for p in os.scandir(root) if p.is_dir()] + ([] if firefox else [root])
+        for folder in folders:
+            for rel in FIREFOX_FILES if firefox else CHROMIUM_FILES:
+                path = os.path.join(folder, rel)
+                if os.path.isfile(path):
+                    out.append({"path": path, "dir": False, "name": f"{b['name']} ({os.path.basename(folder)}: {rel})",
+                                "owners": b["owners"], "signer": b.get("signer", "")})
+    for store in secrets["stores"]:
+        path = exposure.expand(store["path"], env)
+        if store.get("watch"):
+            path = os.path.join(path, store["watch"])
+        if store.get("owners") and os.path.exists(path):
+            out.append({"path": path, "dir": os.path.isdir(path), "name": store["name"],
+                        "owners": store["owners"], "signer": store.get("signer", "")})
     return out
 
 
@@ -76,19 +112,19 @@ def _remove_decoys():
 
 def _elevated(action, cut=False):
     os.makedirs(LOCAL, exist_ok=True)
-    result_file, decoy_file = os.path.join(LOCAL, "tripwire.result"), os.path.join(LOCAL, "tripwire.decoys")
+    result_file, plan_file = os.path.join(LOCAL, "tripwire.result"), os.path.join(LOCAL, "tripwire.plan")
     if os.path.exists(result_file):
         os.remove(result_file)
-    with open(decoy_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(_state()["files"]))
+    with open(plan_file, "w", encoding="utf-8") as f:
+        json.dump({"decoys": _state()["files"], "stores": guarded() if action == "on" else []}, f)
     args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", f'"{os.path.join(HERE, "tripwire_apply.ps1")}"',
-            "-Action", action, "-Source", f'"{HERE}"', "-DecoyFile", f'"{decoy_file}"',
+            "-Action", action, "-Source", f'"{HERE}"', "-PlanFile", f'"{plan_file}"',
             "-ResultFile", f'"{result_file}"'] + (["-Cut"] if cut else [])
     listed = ",".join("'" + a.replace("'", "''") + "'" for a in args)
     subprocess.run(["powershell.exe", "-NoProfile", "-Command",
                     f"Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList {listed}"],
                    capture_output=True, timeout=300)
-    os.remove(decoy_file)
+    os.remove(plan_file)
     if not os.path.exists(result_file):
         return False, "Nothing was changed: the Windows permission prompt was declined or closed."
     with open(result_file, encoding="utf-8-sig") as f:
@@ -98,15 +134,19 @@ def _elevated(action, cut=False):
 
 
 def status():
-    out = {"on": False, "cut": False, "decoys": [], "alerts": []}
+    out = {"on": False, "cut": False, "decoys": [], "stores": [], "alerts": [], "sightings": []}
     try:
         with open(os.path.join(INSTALLED, "tripwire.json"), encoding="utf-8-sig") as f:
             cfg = json.load(f)
-        out.update(on=True, cut=bool(cfg.get("cut")), decoys=cfg.get("decoys") or [])
-        with open(os.path.join(INSTALLED, "alerts.jsonl"), encoding="utf-8-sig") as f:
-            out["alerts"] = [json.loads(line) for line in f if line.strip()][-10:]
+        out.update(on=True, cut=bool(cfg.get("cut")), decoys=cfg.get("decoys") or [], stores=cfg.get("stores") or [])
     except (OSError, ValueError):
-        pass
+        return out
+    for kind in ("alerts", "sightings"):
+        try:
+            with open(os.path.join(INSTALLED, kind + ".jsonl"), encoding="utf-8-sig") as f:
+                out[kind] = [json.loads(line) for line in f if line.strip()][-20:]
+        except (OSError, ValueError):
+            continue    # no file means nothing has happened yet
     return out
 
 
@@ -139,15 +179,22 @@ def analyse(state):
                  f"Program: {a['program']}." + (" gotchu blocked it from the internet." if a.get("cut") else "")
                  + " If this was not you, run a scan and change your passwords from another device.")
                 for a in reversed(state["alerts"])]
-    mode = "A program that trips it loses its internet." if state["cut"] else "Alert only."
-    findings.append((INFO, f"The tripwire is on, watching {len(state['decoys'])} decoys", mode))
+    findings += [(MEDIUM, f"{os.path.basename(s['program'])} read {s['store']}",
+                  f"At {s['time'].replace('T', ' ')}. Program: {s['program']}. This is not the program that owns that "
+                  "data. A backup or security tool can be harmless; anything you do not recognise is worth a scan.")
+                 for s in reversed(state["sightings"])]
+    mode = "A program that trips a decoy loses its internet." if state["cut"] else "Alert only."
+    findings.append((INFO, f"The tripwire is on: {len(state['decoys'])} decoys, {len(state['stores'])} real stores watched",
+                     mode + " Reads of real stores by other programs are listed here, without an alarm for now."))
     return findings
 
 
 def result():
+    state = status()
+    review = ("PROGRAMS TO REVIEW", "Other programs read your browser or chat logins. Check that you recognise each one.")
     labels = {
         "danger": ("THE TRIPWIRE WAS TRIPPED", "Something read a decoy that no honest program touches."),
-        "warn": ("TRIPWIRE OFF", "Nothing is watching for a thief sweeping this PC."),
+        "warn": review if state["on"] else ("TRIPWIRE OFF", "Nothing is watching for a thief sweeping this PC."),
         "ok": ("TRIPWIRE SET", "Quiet so far. You will see a warning window the moment a decoy is read."),
     }
-    return report.build("decoy files on this PC", analyse(status()), labels)
+    return report.build("decoys and login stores on this PC", analyse(state), labels)

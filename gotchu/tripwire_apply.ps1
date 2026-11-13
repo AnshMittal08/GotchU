@@ -3,7 +3,7 @@
 param(
     [ValidateSet('on', 'off', 'restore')][string]$Action,
     [string]$Source,        # folder holding tripwire_watch.ps1
-    [string]$DecoyFile,     # text file: one decoy path per line
+    [string]$PlanFile,      # JSON: { decoys: [path], stores: [{ path, dir, name, owners, signer }] }
     [string]$ResultFile,
     [switch]$Cut
 )
@@ -15,12 +15,30 @@ $task = 'gotchu tripwire'
 
 function Remove-Cuts { & "$env:windir\System32\netsh.exe" advfirewall firewall delete rule name="gotchu cut" | Out-Null }
 
+# Adds or removes "record who reads this" on one file, or on the files inside one folder.
+# Only the audit part of the file's security is read and written; its permissions are not touched.
+function Set-Watch([string]$path, [bool]$isDir, [bool]$remove) {
+    $everyone = New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')
+    $audit = [System.Security.AccessControl.AccessControlSections]::Audit
+    if ($isDir) {
+        $rule = New-Object System.Security.AccessControl.FileSystemAuditRule($everyone, 'ReadData', 'ObjectInherit', 'InheritOnly', 'Success')
+        $sec = [System.IO.Directory]::GetAccessControl($path, $audit)
+    } else {
+        $rule = New-Object System.Security.AccessControl.FileSystemAuditRule($everyone, 'ReadData', 'Success')
+        $sec = [System.IO.File]::GetAccessControl($path, $audit)
+    }
+    if ($remove) { [void]$sec.RemoveAuditRule($rule) } else { $sec.AddAuditRule($rule) }
+    if ($isDir) { [System.IO.Directory]::SetAccessControl($path, $sec) } else { [System.IO.File]::SetAccessControl($path, $sec) }
+}
+
 try {
     if ($Action -eq 'restore') {
         Remove-Cuts
         # The alarm has been dealt with: keep it as history, stop showing it as current.
-        $log = Join-Path $dest 'alerts.jsonl'
-        if (Test-Path $log) { Get-Content $log | Add-Content (Join-Path $dest 'alerts.old.jsonl') -Encoding utf8; Remove-Item $log }
+        foreach ($name in 'alerts', 'sightings') {
+            $log = Join-Path $dest "$name.jsonl"
+            if (Test-Path $log) { Get-Content $log | Add-Content (Join-Path $dest "$name.old.jsonl") -Encoding utf8; Remove-Item $log }
+        }
     }
     elseif ($Action -eq 'on') {
         New-Item -ItemType Directory -Force $dest | Out-Null
@@ -31,15 +49,22 @@ try {
         if (Test-Path $config) { $before = (Get-Content $config -Raw | ConvertFrom-Json).audit_before }
         & $auditpol /set /subcategory:$FS /success:enable | Out-Null
 
-        # "$_" makes plain strings; Get-Content's strings carry extra properties that would end up in the JSON.
-        $decoys = @(Get-Content $DecoyFile | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | ForEach-Object { "$_" })
-        $everyone = New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')
-        foreach ($d in $decoys) {
-            $acl = Get-Acl -LiteralPath $d -Audit
-            $acl.AddAuditRule((New-Object System.Security.AccessControl.FileSystemAuditRule($everyone, 'ReadData', 'Success')))
-            Set-Acl -LiteralPath $d -AclObject $acl
+        # Stop watching whatever an earlier switch-on watched, so nothing is left behind if the list changed.
+        if (Test-Path $config) {
+            foreach ($s in @((Get-Content $config -Raw | ConvertFrom-Json).stores)) {
+                try { Set-Watch $s.path ([bool]$s.dir) $true } catch { }
+            }
         }
-        @{ decoys = $decoys; cut = [bool]$Cut; audit_before = $before } | ConvertTo-Json | Set-Content $config -Encoding utf8
+        $plan = Get-Content $PlanFile -Raw | ConvertFrom-Json
+        $decoys = @($plan.decoys | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | ForEach-Object { "$_" })
+        foreach ($d in $decoys) { Set-Watch $d $false $false }
+        # A real store that cannot be watched (in use, or gone) is skipped, not fatal: the decoys still work.
+        $stores = @()
+        foreach ($s in @($plan.stores)) {
+            try { Set-Watch $s.path ([bool]$s.dir) $false; $stores += $s } catch { }
+        }
+        @{ decoys = $decoys; stores = $stores; cut = [bool]$Cut; audit_before = $before } |
+            ConvertTo-Json -Depth 5 | Set-Content $config -Encoding utf8
 
         $user = "$env:USERDOMAIN\$env:USERNAME"
         $ps = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -56,7 +81,11 @@ try {
         Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue
         Remove-Cuts
         if (Test-Path $config) {
-            $before = (Get-Content $config -Raw | ConvertFrom-Json).audit_before
+            $old = Get-Content $config -Raw | ConvertFrom-Json
+            foreach ($s in @($old.stores)) {
+                try { Set-Watch $s.path ([bool]$s.dir) $true } catch { }
+            }
+            $before = $old.audit_before
             if ($before -notlike '*Success*') { & $auditpol /set /subcategory:$FS /success:disable | Out-Null }
         }
         Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue

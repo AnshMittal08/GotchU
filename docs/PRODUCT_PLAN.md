@@ -94,14 +94,20 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 - Proves it works: it reads everything on an unprotected PC.
 - Use: every later claim is measured with it.
 
-### C. Decoys and tripwire - decoys done, real stores next
+### C. Decoys and tripwire - decoys done, real stores in observe mode
 - As built: `gotchu tripwire` plants four decoy wallet files (only for apps that are not installed). A
   watcher in Program Files, started at sign-in with administrator rights, shows an alarm when one is read
   and, with `--cut`, blocks that program from the internet. Owner's choice: start alert-only, then cut.
 - Verified live on Windows 11 Home with a renamed copy of curl: alarm logged, that program lost its
   internet, other programs kept theirs; `--off` removed everything it had added.
-- Still to do: watch the real browser, Telegram and Discord stores once false alarms are measured; a page
-  in the window; decoys that are not wallets.
+- Real stores, built 2026-11-13: every store in the secrets map that has an owner is watched (24 files and
+  folders on the test PC). The watcher ignores the owner, recognised by file name and by the publisher
+  on its code signature, and writes any other reader to a list shown by `gotchu tripwire`. Verified
+  live: a stand-in program reading Chrome's login store was listed; Chrome itself, running, was not.
+- Deliberately no alarm for real stores yet. The drop rule below needs a count of honest readers
+  (backup tools, antivirus, sync) first; the list is that measurement.
+- Known gap: GotchU's own `exposure` report reads these stores, so it appears in the list as python.exe.
+- Still to do: turn the list into an alarm after the soak; a page in the window; decoys that are not wallets.
 - First, test on this PC whether Windows Home records file reads (`auditpol`, event 4663). Guides say it
   does; a Microsoft forum thread reports cases where the event never appears. One permission prompt, one
   setting, with undo.

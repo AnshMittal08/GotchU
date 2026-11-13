@@ -28,6 +28,28 @@ function Show-Alarm([string]$text) {
         -ArgumentList '-NoProfile', '-STA', '-EncodedCommand', $b64
 }
 
+function Find-Store([string]$file) {
+    $l = $file.ToLower()
+    foreach ($s in @($cfg.stores)) {
+        $p = "$($s.path)".ToLower()
+        if ($l -eq $p -or ($s.dir -and $l.StartsWith($p + '\'))) { return $s }
+    }
+}
+
+# The owner is recognised by file name AND, where the map knows it, by who signed the program -
+# so malware that merely calls itself chrome.exe does not pass.
+$signers = @{}
+function Test-Owner([string]$proc, $store) {
+    $name = [System.IO.Path]::GetFileName($proc)
+    if (-not (@($store.owners) | Where-Object { $_ -ieq $name })) { return $false }
+    if (-not $store.signer) { return $true }
+    if (-not $signers.ContainsKey($proc)) {
+        $sig = Get-AuthenticodeSignature -LiteralPath $proc -ErrorAction SilentlyContinue
+        $signers[$proc] = if ($sig -and $sig.Status -eq 'Valid') { $sig.SignerCertificate.Subject } else { '' }
+    }
+    return $signers[$proc] -like "*O=$($store.signer),*"
+}
+
 $query = New-Object System.Diagnostics.Eventing.Reader.EventLogQuery(
     'Security', [System.Diagnostics.Eventing.Reader.PathType]::LogName, '*[System[(EventID=4663)]]')
 $watcher = New-Object System.Diagnostics.Eventing.Reader.EventLogWatcher($query)
@@ -44,7 +66,19 @@ while ($true) {
     foreach ($d in ([xml]$rec.ToXml()).Event.EventData.Data) { $data[$d.Name] = $d.'#text' }
     $file = "$($data.ObjectName)"
     $proc = "$($data.ProcessName)"
-    if (-not $decoys.ContainsKey($file.ToLower()) -or (Test-Expected $proc)) { continue }
+    if (Test-Expected $proc) { continue }
+    if (-not $decoys.ContainsKey($file.ToLower())) {
+        # A real store (browser, chat app). Its owner reading it is normal. Anything else is written
+        # down for review - no alarm yet, until we know how often honest programs do this.
+        $store = Find-Store $file
+        if (-not $store -or (Test-Owner $proc $store)) { continue }
+        $key = "$proc|$($store.path)"
+        if ($seen[$key] -and ((Get-Date) - $seen[$key]).TotalMinutes -lt 60) { continue }
+        $seen[$key] = Get-Date
+        @{ time = (Get-Date).ToString('s'); program = $proc; store = $store.name; file = $file } |
+            ConvertTo-Json -Compress | Add-Content -Path (Join-Path $PSScriptRoot 'sightings.jsonl') -Encoding utf8
+        continue
+    }
     if ($seen[$proc] -and ((Get-Date) - $seen[$proc]).TotalSeconds -lt 60) { continue }   # one alarm per program per minute
     $seen[$proc] = Get-Date
 

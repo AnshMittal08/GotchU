@@ -77,8 +77,12 @@ point to the right tool instead of pretending.
       auditing; an elevated watcher in Program Files raises a warning window when one is read and,
       with `--cut`, blocks that program from the internet. `--off` removes everything it added.
       Verified live on Windows 11 Home: alarm logged, the reading program lost its internet, others kept it.
-- [ ] `tripwire`: page in the window; watch real stores (browser, Telegram, Discord) once false alarms
-      are measured; decoys outside wallets (documents, cloud keys); opt-in online decoys.
+- [x] `tripwire`: also watches real stores that have a known owner (browser logins, sessions and
+      autofill; Telegram's key file; Discord's storage). A read by any program other than the owner -
+      matched by name and by code-signing publisher - is listed for review. No alarm yet, on purpose.
+- [ ] `tripwire`: after a soak period, raise an alarm for real-store reads too; page in the window;
+      decoys outside wallets (documents, cloud keys); opt-in online decoys; publishers for Brave,
+      Vivaldi, Opera and Signal (not yet checked on a real install, so matched by name only).
 - [x] `vault`: key files encrypted with Windows' AES-256-GCM under a passphrase (scrypt), with a paper
       recovery key; file names are encrypted too. `add --move` deletes the original only after the vault
       copy is read back and matches; `use` gives a file to one command and removes it afterwards.
