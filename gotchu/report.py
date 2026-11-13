@@ -1,7 +1,24 @@
 """Shared result shape for every command: a verdict plus findings, as data or as text."""
+import json
+import subprocess
 
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
 _ORDER = {HIGH: 0, MEDIUM: 1, INFO: 2}
+
+
+class CouldNotRun(Exception):
+    """A command could not finish. The message says why, in words for the user."""
+
+
+def powershell_json(script, what, timeout=180):
+    """Run one of gotchu's read-only PowerShell collectors and return what it printed, as data."""
+    try:
+        out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                              "-File", script], capture_output=True, timeout=timeout)
+        return json.loads(out.stdout.decode("utf-8", "replace"))
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        raise CouldNotRun(f"Windows PowerShell did not give gotchu an answer, so {what} could not finish. Security "
+                          "software or a policy set by your workplace may be blocking it. Nothing was changed.") from None
 
 
 def level(findings):

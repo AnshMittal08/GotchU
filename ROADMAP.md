@@ -164,5 +164,5 @@ point to the right tool instead of pretending.
     python -m gotchu harden --undo <lock>       # put it back exactly as it was
     python -m gotchu setup [--remove]           # install, update or remove the administrator helpers
 
-Exit code: 0 nothing found, 1 worth a look, 2 dangerous.
+Exit code: 0 nothing found, 1 worth a look, 2 dangerous, 3 could not run (the message says why).
 Tests: `python -m unittest`

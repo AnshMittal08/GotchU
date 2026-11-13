@@ -3,10 +3,8 @@
 `collect()` takes a snapshot of the PC; `analyse()` is pure and judges a snapshot,
 so the rules can be tested with made-up snapshots.
 """
-import json
 import os
 import re
-import subprocess
 
 from . import check, report
 from .report import HIGH, INFO, MEDIUM
@@ -36,10 +34,7 @@ LABELS = {
 
 
 def collect():
-    script = os.path.join(os.path.dirname(__file__), "collect.ps1")
-    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                          "-File", script], capture_output=True, timeout=180)
-    return json.loads(out.stdout.decode("utf-8", "replace"))
+    return report.powershell_json(os.path.join(os.path.dirname(__file__), "collect.ps1"), "the scan")
 
 
 def analyse(snap):

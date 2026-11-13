@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 
 from . import __version__, check, exposure, harden, report, scan, tripwire
@@ -137,6 +138,14 @@ def main(argv=None):
     if args.command == "setup":
         return _setup(args)
 
+    try:
+        return _run(args)
+    except report.CouldNotRun as e:
+        print(e)
+        return 3
+
+
+def _run(args):
     if args.command == "harden" and (args.on or args.undo):
         ok, message = harden.change(args.on or args.undo, undo=bool(args.undo))
         print(message)
@@ -148,7 +157,13 @@ def main(argv=None):
         return 0 if ok else 1
 
     if args.command == "check":
-        result = check.result(args.path)
+        if not os.path.exists(args.path):
+            raise report.CouldNotRun(f"{args.path} does not exist. Check the path and try again.")
+        try:
+            result = check.result(args.path)
+        except OSError as e:
+            raise report.CouldNotRun(f"Windows would not let gotchu read {args.path} ({e.strerror or e}). "
+                                     "Try a copy in your Downloads folder.") from None
     elif args.command == "tripwire":
         result = tripwire.result()
     elif args.command == "exposure":

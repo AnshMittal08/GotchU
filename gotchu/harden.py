@@ -5,9 +5,7 @@ user declines. Changing a lock saves the previous setting first, so undo is exac
 `analyse()` is pure so it can be tested with made-up states.
 """
 import base64
-import json
 import os
-import subprocess
 
 from . import admin, report
 from .report import INFO, MEDIUM
@@ -96,9 +94,7 @@ BY_KEY = {lock["key"]: lock for lock in LOCKS}
 
 
 def collect():
-    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                          "-File", os.path.join(HERE, "harden.ps1")], capture_output=True, timeout=120)
-    return json.loads(out.stdout.decode("utf-8", "replace"))
+    return report.powershell_json(os.path.join(HERE, "harden.ps1"), "reading your protection settings", timeout=120)
 
 
 def analyse(state):
