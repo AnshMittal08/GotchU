@@ -1,6 +1,6 @@
 # GotchU product plan - what makes it worth using
 
-Status: agreed with the owner on 2026-11-13. Phases A and B are built, and the decoy half of C.
+Status: agreed with the owner on 2026-11-13. Phases A and B are built, the decoy half of C, and the vault from D.
 The product was named GotchU on 2026-11-13 (working name before that: pcguard); the command is `gotchu`.
 Progress is tracked in ROADMAP.md; this file holds the reasoning.
 
@@ -115,7 +115,12 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 - Fallbacks if Home does not record reads: Windows' file-activity tracing, then decoys only.
 - Drop rule: more than one false alarm a week in normal use on this PC, or alarm slower than 2 seconds.
 
-### D. Vault and "no file to steal"
+### D. Vault and "no file to steal" - vault done, guides next
+- As built: `gotchu vault` (create, add, list, get, use, remove). One random data key encrypts every file
+  and the index of names with Windows' AES-256-GCM; that key is stored wrapped by the passphrase and by a
+  recovery key (scrypt). There is no "open" state to forget: every command asks for the passphrase, and
+  `use` puts a file on disk only while one command runs. This replaces the auto-lock idea.
+- Not built: Windows Hello unlock (passphrase only for now), the guides, a page in the window.
 - Build: vault for key files using Windows' built-in encryption (no home-made crypto), recovery key,
   auto-lock; guides for SSH with Windows Hello, short-lived cloud sign-in, Telegram passcode, moving
   browser passwords out.

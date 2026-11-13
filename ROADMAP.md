@@ -79,6 +79,12 @@ point to the right tool instead of pretending.
       Verified live on Windows 11 Home: alarm logged, the reading program lost its internet, others kept it.
 - [ ] `tripwire`: page in the window; watch real stores (browser, Telegram, Discord) once false alarms
       are measured; decoys outside wallets (documents, cloud keys); opt-in online decoys.
+- [x] `vault`: key files encrypted with Windows' AES-256-GCM under a passphrase (scrypt), with a paper
+      recovery key; file names are encrypted too. `add --move` deletes the original only after the vault
+      copy is read back and matches; `use` gives a file to one command and removes it afterwards.
+      Checked against the published AES-GCM test answer; wrong passphrase and tampering are rejected.
+- [ ] `vault`: unlock with Windows Hello; page in the window; change passphrase; guides for SSH keys
+      held by Windows Hello, short-lived cloud sign-in, Telegram passcode, moving browser passwords out.
 - [ ] `respond`: timeline of what ran, inventory of what was readable (sites with saved passwords and
       sessions, key files, cloud tokens), prioritised recovery checklist, evidence bundle.
 - Verify: rebuilt real-world cases are flagged; a corpus of legitimate software passes clean.
@@ -134,6 +140,10 @@ point to the right tool instead of pretending.
     python -m gotchu tripwire --on [--cut]      # plant decoys and watch; --cut also blocks the reader's internet
     python -m gotchu tripwire --restore         # after an alarm: lift blocks, clear the alarm
     python -m gotchu tripwire --off             # remove decoys, put Windows back as it was
+    python -m gotchu vault create                # make the vault, choose a passphrase, get a recovery key
+    python -m gotchu vault add [--move] <file>   # encrypt a file into it (--move deletes the original)
+    python -m gotchu vault list | get <name> | remove <name>
+    python -m gotchu vault use <name> -- <command with {}>   # file exists only while the command runs
     python -m gotchu harden [--json]            # which protections are on
     python -m gotchu harden --on <lock>         # asr, folder_protection, network_protection, cloud_level
     python -m gotchu harden --undo <lock>       # put it back exactly as it was

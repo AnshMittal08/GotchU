@@ -20,7 +20,8 @@ Status: early. It works on the author's Windows 11 Home PC; it has not been test
 | `gotchu exposure` | What could a thief take from this PC today? Counts saved passwords, sessions, keys and wallets. Never shows or copies one. |
 | `gotchu harden` | Which Windows protections are off? Turns four of them on, saving the old setting so `--undo` is exact. |
 | `gotchu tripwire` | Plants decoy wallet files no honest program opens. When one is read you get an alarm, and with `--cut` that program loses its internet. |
-| `gotchu ui` | All of the above in a local window, except the tripwire. |
+| `gotchu vault` | Keeps key files encrypted with a passphrase, so a stolen copy is useless. `vault use` hands a key to one command and removes it afterwards. |
+| `gotchu ui` | A local window for check, scan, exposure and harden. |
 
 ## Run it
 
@@ -29,6 +30,9 @@ Needs Windows 10 or 11 and Python 3.10 or newer. No other packages.
     python -m gotchu ui
     python -m gotchu exposure
     python -m gotchu tripwire --on
+    python -m gotchu vault create
+    python -m gotchu vault add --move my-server-key.pem
+    python -m gotchu vault use my-server-key.pem -- ssh -i {} user@host
 
 Tests: `python -m unittest`
 
@@ -38,9 +42,10 @@ Tests: `python -m unittest`
 - **Read-only unless you say so.** A change needs your yes and a Windows permission prompt, and can be undone.
 - **Plain language.** Every finding says what was seen, why it matters and what to do.
 - **Honest limits.** No tool stops every attack. The tripwire catches a thief that sweeps for wallets, not
-  every thief; a patient attacker with administrator rights can switch any tool off.
+  every thief; a patient attacker with administrator rights can switch any tool off. The vault protects
+  files at rest: a file you have taken out is an ordinary file again, and if you lose both the passphrase
+  and the recovery key, the files are gone.
 
 ## Where it is going
 
-See [ROADMAP.md](ROADMAP.md) and [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md): a vault that makes stolen key
-files useless, watching real browser and chat stores, a recovery checklist after a theft, and an installer.
+See [ROADMAP.md](ROADMAP.md) and [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md): unlocking the vault with Windows Hello, watching real browser and chat stores, a recovery checklist after a theft, and an installer.

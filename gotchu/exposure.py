@@ -25,7 +25,7 @@ FIX = {
                 "you rarely use, and after any infection use 'sign out everywhere' on the important ones.",
     "messenger": "A copy of this folder signs a thief in as you. Set a local passcode in the app if it has one.",
     "cloud": "Use short-lived sign-in instead of a key saved in a file, and delete keys you no longer need.",
-    "keys": "Keep these in a locked vault or on a security key, not in an open folder.",
+    "keys": "Put them in the vault (gotchu vault add --move <file>) so a stolen copy is useless.",
     "wallet": "Keep savings in a hardware wallet; anything left here can be emptied by one bad download.",
 }
 
