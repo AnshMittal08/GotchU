@@ -143,18 +143,19 @@ def _key_files(folder, depth=3):
     return found
 
 
-def collect(env=None, secrets=None):
+def collect(env=None, secrets=None, decoys=None):
     env = os.environ if env is None else env
     secrets = secrets or load_map()
+    decoys = tripwire.load_state() if decoys is None else decoys
     items = []
     for entry in secrets["browsers"]:
         root = expand(entry["root"], env)
         if os.path.isdir(root):
             items += _browser(entry, root, secrets.get("wallet_extensions", {}))
-    planted = [r.lower() for r in tripwire.decoy_roots()]   # gotchu's own decoys are not real wallets
     for store in secrets["stores"]:
         path = expand(store["path"], env)
-        if not os.path.exists(path) or any(path.lower().startswith(r) for r in planted):
+        # gotchu's own decoys are not real wallets - but a real wallet installed into a decoy folder since is.
+        if not os.path.exists(path) or tripwire.only_decoys(path, decoys):
             continue
         if store.get("contains"):
             try:

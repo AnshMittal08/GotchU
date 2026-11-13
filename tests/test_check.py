@@ -15,6 +15,20 @@ def make_zip(folder, name, files):
     return path
 
 
+def lock(path):
+    """Mark every member as password-protected, the way an encrypted zip is marked."""
+    with open(path, "rb") as f:
+        data = bytearray(f.read())
+    for signature, offset in ((b"PK\x03\x04", 6), (b"PK\x01\x02", 8)):
+        i = data.find(signature)
+        while i >= 0:
+            data[i + offset] |= 1
+            i = data.find(signature, i + 4)
+    with open(path, "wb") as f:
+        f.write(data)
+    return path
+
+
 class CheckTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -43,6 +57,41 @@ class CheckTests(unittest.TestCase):
         found = self.titles(path)
         self.assertTrue(any("disguised" in t for _, t in found))
         self.assertTrue(any("Shortcut" in t for _, t in found))
+
+    def test_password_protected_programs_are_reported_not_crashed_on(self):
+        path = lock(make_zip(self.tmp.name, "invoice_password_1234.zip", {"Invoice.exe": b"MZ" + b"\0" * 200}))
+        found = self.titles(path)
+        self.assertIn(("HIGH", "Password-protected archive with programs inside"), found)
+        lock(make_zip(self.tmp.name, "photos.zip", {"a.jpg": b"\xff\xd8\xff", "b.jpg": b"\xff\xd8\xff"}))
+        self.assertIn(("MEDIUM", "Password-protected archive: 2 files could not be checked"),
+                      self.titles(os.path.join(self.tmp.name, "photos.zip")))
+
+    def test_a_damaged_archive_is_reported_not_crashed_on(self):
+        path = make_zip(self.tmp.name, "setup.zip", {"setup.exe": b"MZ" + os.urandom(4096) + b"\0" * 50000})
+        with open(path, "rb") as f:
+            data = bytearray(f.read())
+        start = data.find(b"setup.exe") + len("setup.exe")
+        data[start + 10:start + 400] = b"\xff" * 390        # break the compressed bytes
+        with open(path, "wb") as f:
+            f.write(data)
+        self.assertIn("Parts of the download could not be read", [t for _, t in self.titles(path)])
+
+    def test_disk_images_are_flagged_and_their_empty_space_is_not_padding(self):
+        path = os.path.join(self.tmp.name, "Invoice.iso")
+        with open(path, "wb") as f:
+            f.write(b"\0" * (25 * 1024 * 1024))
+        found = self.titles(path)
+        self.assertIn(("MEDIUM", "Disk image: Invoice.iso"), found)
+        self.assertFalse(any("Padding" in t for _, t in found))
+
+    def test_a_folder_can_be_checked_without_its_subfolders(self):
+        os.makedirs(os.path.join(self.tmp.name, "app", "resources"))
+        for name in ("app/app.exe", "app/resources/data.bin"):
+            with open(os.path.join(self.tmp.name, name), "wb") as f:
+                f.write(b"MZ")
+        folder = os.path.join(self.tmp.name, "app")
+        self.assertEqual([m.name for m in check.members(folder, recursive=False)], ["app.exe"])
+        self.assertEqual(len(check.members(folder)), 2)
 
     def test_ordinary_zip_passes(self):
         path = make_zip(self.tmp.name, "notes.zip", {

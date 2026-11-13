@@ -15,11 +15,11 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote
 
-from . import __version__, check, exposure, harden, scan
+from . import __version__, check, exposure, harden, report, scan, tripwire
 
 HERE = os.path.dirname(__file__)
 WORTH_CHECKING = {".zip", ".7z", ".rar", ".iso", ".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".lnk",
-                  ".scr", ".jar", ".hta"}
+                  ".scr", ".jar", ".hta", ".img", ".vhd", ".vhdx"}
 
 
 def recent_downloads(limit=12):
@@ -90,6 +90,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, scan.result())
             if self.path == "/api/exposure":
                 return self._send(200, exposure.result())
+            if self.path == "/api/tripwire":
+                return self._send(200, tripwire.result())
             if self.path == "/api/harden":
                 return self._send(200, harden.result())
             if self.path == "/api/harden/change":
@@ -99,6 +101,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"path": browse(bool(body.get("folder")))})
         except PermissionError:
             return self._send(400, {"error": "Windows would not let gotchu read that. Try a copy in your Downloads folder."})
+        except report.CouldNotRun as e:
+            return self._send(500, {"error": str(e)})
         except Exception as e:  # report instead of dropping the connection
             return self._send(500, {"error": f"The check could not finish: {e}"})
         self._send(404, {"error": "Not found."})

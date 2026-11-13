@@ -21,6 +21,8 @@ $o = [ordered]@{
     memory_integrity = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity').Enabled
     # Full path: other shells (Git Bash) ship a different whoami that has no /groups.
     is_admin         = [bool](& "$env:windir\System32\whoami.exe" /groups | Select-String 'S-1-5-32-544')
-    file_history     = [bool](Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\FileHistory')
+    # Not the FileHistory registry key: it exists on PCs where File History was never set up (seen on
+    # Windows 11 build 26200). Its configuration file is written only once File History is set up.
+    file_history     = Test-Path -LiteralPath (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\FileHistory\Configuration\Config1.xml')
 }
 $o | ConvertTo-Json -Compress

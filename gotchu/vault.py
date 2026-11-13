@@ -24,7 +24,8 @@ from ctypes import wintypes
 
 FOLDER = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gotchu", "vault")
 MAX_FILE = 64 * 1024 * 1024
-SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1}
+SCRYPT = {"n": 2 ** 17, "r": 8, "p": 1}          # OWASP's minimum for scrypt; stored in each slot
+LEGACY_SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1}   # slots from before the setting was stored with them
 TAG_MISMATCH = 0xC000A002
 
 
@@ -94,14 +95,22 @@ def unseal(key, blob, aad=b""):
     return _gcm(key, blob[:12], blob[12:-16], aad, tag=blob[-16:])
 
 
-def _stretch(secret, salt):
-    return hashlib.scrypt(secret.encode("utf-8"), salt=salt, dklen=32, maxmem=2 ** 27, **SCRYPT)
+def _stretch(secret, salt, cost):
+    cost = {k: int(cost[k]) for k in ("n", "r", "p")}
+    return hashlib.scrypt(secret.encode("utf-8"), salt=salt, dklen=32, maxmem=2 ** 28, **cost)
 
 
 def _slot(secret, data_key):
     salt = secrets.token_bytes(16)
-    return {"salt": base64.b64encode(salt).decode(),
-            "wrapped": base64.b64encode(seal(_stretch(secret, salt), data_key, b"gotchu-vault-key")).decode()}
+    return {"salt": base64.b64encode(salt).decode(), "scrypt": dict(SCRYPT),
+            "wrapped": base64.b64encode(seal(_stretch(secret, salt, SCRYPT), data_key, b"gotchu-vault-key")).decode()}
+
+
+def _save_header(header, folder):
+    tmp = os.path.join(folder, "vault.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(header, f, indent=1)
+    os.replace(tmp, os.path.join(folder, "vault.json"))
 
 
 def _tidy_recovery(text):
@@ -118,24 +127,57 @@ def create(passphrase, folder=FOLDER):
         raise FileExistsError("There is already a vault here.")
     os.makedirs(folder, exist_ok=True)
     data_key = secrets.token_bytes(32)
-    recovery = base64.b32encode(secrets.token_bytes(20)).decode()
+    recovery = _new_recovery()
     header = {"version": 1, "passphrase": _slot(passphrase, data_key), "recovery": _slot(recovery, data_key)}
-    with open(os.path.join(folder, "vault.json"), "w", encoding="utf-8") as f:
-        json.dump(header, f, indent=1)
+    _save_header(header, folder)
     _save_index(data_key, {}, folder)
+    return _grouped(recovery)
+
+
+def _new_recovery():
+    return base64.b32encode(secrets.token_bytes(20)).decode()
+
+
+def _grouped(recovery):
     return "-".join(recovery[i:i + 4] for i in range(0, len(recovery), 4))
+
+
+def _load_header(folder):
+    with open(os.path.join(folder, "vault.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def change_passphrase(data_key, passphrase, folder=FOLDER):
+    """Wrap the data key under a new passphrase. The old one stops working; the files are not touched."""
+    header = _load_header(folder)
+    header["passphrase"] = _slot(passphrase, data_key)
+    _save_header(header, folder)
+
+
+def replace_recovery(data_key, folder=FOLDER):
+    """Make a new recovery key; the old one stops working. Returns the new key - shown once, never stored."""
+    recovery = _new_recovery()
+    header = _load_header(folder)
+    header["recovery"] = _slot(recovery, data_key)
+    _save_header(header, folder)
+    return _grouped(recovery)
 
 
 def unlock(secret, folder=FOLDER):
     """Returns the data key for a correct passphrase or recovery key; raises WrongSecret otherwise."""
-    with open(os.path.join(folder, "vault.json"), encoding="utf-8") as f:
-        header = json.load(f)
+    header = _load_header(folder)
     for slot, candidate in (("passphrase", secret), ("recovery", _tidy_recovery(secret))):
+        entry = header[slot]
         try:
-            return unseal(_stretch(candidate, base64.b64decode(header[slot]["salt"])),
-                          base64.b64decode(header[slot]["wrapped"]), b"gotchu-vault-key")
+            data_key = unseal(_stretch(candidate, base64.b64decode(entry["salt"]), entry.get("scrypt", LEGACY_SCRYPT)),
+                              base64.b64decode(entry["wrapped"]), b"gotchu-vault-key")
         except WrongSecret:
-            pass
+            continue
+        if slot == "passphrase" and entry.get("scrypt") != SCRYPT:
+            # Wrapped with an older, cheaper setting: wrap it again with today's, now that the passphrase is known.
+            header["passphrase"] = _slot(secret, data_key)
+            _save_header(header, folder)
+        return data_key
     raise WrongSecret()
 
 

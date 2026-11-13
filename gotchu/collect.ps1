@@ -27,6 +27,22 @@ $o.run = @(foreach ($k in $runKeys) {
     if ($p) { $p.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object { @{ key = $k; name = $_.Name; value = "$($_.Value)" } } }
 })
 
+# Start-up folders (yours and all users'): everything in them runs at sign-in. Shortcuts are resolved to
+# the program they start and its arguments.
+$shell = New-Object -ComObject WScript.Shell
+$o.startup = @(foreach ($dir in [Environment]::GetFolderPath('Startup'), [Environment]::GetFolderPath('CommonStartup')) {
+    if ($dir -and (Test-Path -LiteralPath $dir)) {
+        Get-ChildItem -LiteralPath $dir -File -Force | Where-Object { $_.Name -ne 'desktop.ini' } | ForEach-Object {
+            $e = @{ name = $_.Name; path = $_.FullName; target = ''; args = '' }
+            if ($_.Extension -eq '.lnk' -and $shell) {
+                $link = $shell.CreateShortcut($_.FullName)
+                $e.target = [Environment]::ExpandEnvironmentVariables("$($link.TargetPath)"); $e.args = "$($link.Arguments)"
+            }
+            $e
+        }
+    }
+})
+
 $i = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 $o.proxy = @{ enabled = [bool]$i.ProxyEnable; server = "$($i.ProxyServer)"; pac = "$($i.AutoConfigURL)" }
 

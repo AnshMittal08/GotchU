@@ -67,7 +67,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    alarm(["Warning window:<br/>a program read a decoy"]) --> me{"Was it you?<br/>For example you opened the decoy folder"}
+    alarm(["Warning window:<br/>a program read a decoy"]) --> me{"Was it you?<br/>For example you opened the decoy folder,<br/>or just installed that wallet app"}
     me -- "Yes" --> clear["gotchu tripwire --restore<br/>clears the alarm and any block"]
     me -- "No, or not sure" --> offline["Disconnect from the internet"]
     offline --> who["gotchu tripwire<br/>shows which program, and when"]
@@ -119,6 +119,9 @@ Every change GotchU makes has a way back.
 | You did | To undo |
 |---|---|
 | Turned on a lock | `gotchu harden --undo <lock>`, or "Put it back" in the window |
-| Turned on the tripwire | `gotchu tripwire --off` removes the decoys, the watcher and the Windows setting |
+| Turned on the tripwire | `gotchu tripwire --off` stops the watcher, puts the Windows setting back and removes the decoys (a wallet app installed since keeps its data) |
 | Got an alarm, dealt with it | `gotchu tripwire --restore` lifts the block and clears the alarm |
 | Put a file in the vault | `gotchu vault get <name>` takes it out again |
+| Forgot the vault passphrase | `gotchu vault passphrase`, opened with the recovery key |
+| Lost the paper with the recovery key | `gotchu vault recovery` makes a new one; the old one stops working |
+| Let GotchU install its administrator helpers | `gotchu setup --remove`, once the tripwire is off and no lock is waiting to be put back |

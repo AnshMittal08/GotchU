@@ -23,9 +23,22 @@ A detection rule that misses some malware is a normal bug, not a vulnerability: 
 ## How GotchU limits its own risk
 
 - Standard library only; no third-party packages to be poisoned.
-- The only code that runs elevated in the background is one short script, run from Program Files.
+- The only code that runs elevated in the background is one short script, run as SYSTEM from Program Files.
+- Code that runs elevated always runs from `C:\Program Files\gotchu`, never from GotchU's own folder.
+  It is copied there only on first use or by `gotchu setup`, each copy checked against the SHA-256 of the
+  file GotchU read, and GotchU will not ask for elevation while its own copy differs from the installed one.
+- Elevated helpers check anything they read from your profile (a SHA-256 for the tripwire's plan, allowed
+  values for an old journal) and write only into Program Files.
 - The local window listens on 127.0.0.1 only, needs a one-time token, and checks the Host header.
-- Encryption is Windows' own AES-256-GCM; GotchU contains no cipher code.
+- Encryption is Windows' own AES-256-GCM; GotchU contains no cipher code. Passphrases are stretched with
+  scrypt (N=2^17, r=8, p=1).
+
+## Known limit
+
+If GotchU is installed in a folder your account can change (a cloned copy, or Python installed only for
+you), a program running as you can change GotchU's Python code, and with it what GotchU asks Windows to
+run when you approve a prompt. `gotchu setup` warns when this is the case. Installing GotchU with a Python
+that is installed for all users, in Program Files, closes the gap; the planned signed installer will too.
 
 ## Supported versions
 

@@ -1,8 +1,26 @@
 import argparse
 import json
+import os
 import sys
 
 from . import __version__, check, exposure, harden, report, scan, tripwire
+
+
+def _choose_passphrase(getpass, prompt, nothing):
+    """Ask for a new passphrase twice. None (after saying why) if it is too short or the two differ."""
+    passphrase = getpass.getpass(f"{prompt} (at least 10 characters; a few random words work well): ")
+    if len(passphrase) < 10:
+        print(f"Too short. {nothing}")
+        return None
+    if passphrase != getpass.getpass("Type it again: "):
+        print(f"The two did not match. {nothing}")
+        return None
+    return passphrase
+
+
+RECOVERY_NOTE = ("Write this on paper now and keep it away from this PC. It is shown only once.\n"
+                 "If you forget the passphrase, this key is the only other way in. Lose both and the\n"
+                 "files in the vault are gone for good.")
 
 
 def _vault(args):
@@ -15,18 +33,11 @@ def _vault(args):
             if vault.exists():
                 print("There is already a vault on this PC.")
                 return 1
-            passphrase = getpass.getpass("Choose a passphrase (at least 10 characters; a few random words work well): ")
-            if len(passphrase) < 10:
-                print("Too short. Nothing was created.")
-                return 1
-            if passphrase != getpass.getpass("Type it again: "):
-                print("The two did not match. Nothing was created.")
+            passphrase = _choose_passphrase(getpass, "Choose a passphrase", "Nothing was created.")
+            if passphrase is None:
                 return 1
             recovery = vault.create(passphrase)
-            print(f"\nVault created in {vault.FOLDER}\n\nRECOVERY KEY:  {recovery}\n\n"
-                  "Write this on paper now and keep it away from this PC. It is shown only once.\n"
-                  "If you forget the passphrase, this key is the only other way in. Lose both and the\n"
-                  "files in the vault are gone for good.")
+            print(f"\nVault created in {vault.FOLDER}\n\nRECOVERY KEY:  {recovery}\n\n{RECOVERY_NOTE}")
             return 0
         if not vault.exists():
             print("There is no vault yet. Make one with: gotchu vault create")
@@ -55,6 +66,15 @@ def _vault(args):
                 print("Give the command to run, for example: gotchu vault use server.pem -- ssh -i {} user@host")
                 return 1
             return vault.use(key, args.name, command)
+        elif args.action == "passphrase":
+            passphrase = _choose_passphrase(getpass, "Choose a new passphrase", "Nothing was changed.")
+            if passphrase is None:
+                return 1
+            vault.change_passphrase(key, passphrase)
+            print("Passphrase changed. The old one no longer opens the vault; your recovery key still does.")
+        elif args.action == "recovery":
+            recovery = vault.replace_recovery(key)
+            print(f"\nNEW RECOVERY KEY:  {recovery}\n\nThe old recovery key no longer opens the vault.\n{RECOVERY_NOTE}")
         else:
             vault.remove(key, args.name)
             print(f"{args.name} removed from the vault.")
@@ -66,6 +86,20 @@ def _vault(args):
     except (OSError, ValueError) as e:
         print(e)
     return 1
+
+
+def _setup(args):
+    from . import admin
+    ok, message = admin.remove() if args.remove else admin.install()
+    print(message)
+    if ok and not args.remove:
+        if admin.own_folder_writable():
+            print(f"\nNote: gotchu itself is in a folder your account can change ({admin.HERE}). A program running as\n"
+                  "you could change it, including what it asks Windows to run as administrator. For the strongest\n"
+                  "setup, install gotchu with a Python that is installed for all users, in Program Files.")
+        if tripwire.status()["on"]:
+            print("\nThe tripwire is on: run gotchu tripwire --on once more so its watcher uses the new version.")
+    return 0 if ok else 1
 
 
 def main(argv=None):
@@ -106,6 +140,10 @@ def main(argv=None):
     a.add_argument("run", nargs=argparse.REMAINDER, help="the command; {} is replaced by the file's path")
     a = act.add_parser("remove", help="delete a file from the vault")
     a.add_argument("name")
+    act.add_parser("passphrase", help="choose a new passphrase (opens with the old one or the recovery key)")
+    act.add_parser("recovery", help="make a new recovery key; the old one stops working")
+    p = sub.add_parser("setup", help="install or update gotchu's administrator helpers in Program Files")
+    p.add_argument("--remove", action="store_true", help="remove them, once nothing gotchu turned on still needs them")
     p = sub.add_parser("ui", help="open the gotchu window in your browser")
     p.add_argument("path", nargs="?", help="a download to check as soon as the window opens")
     p.add_argument("--no-browser", action="store_true", help="start without opening a browser")
@@ -118,6 +156,17 @@ def main(argv=None):
     if args.command == "vault":
         return _vault(args)
 
+    if args.command == "setup":
+        return _setup(args)
+
+    try:
+        return _run(args)
+    except report.CouldNotRun as e:
+        print(e)
+        return 3
+
+
+def _run(args):
     if args.command == "harden" and (args.on or args.undo):
         ok, message = harden.change(args.on or args.undo, undo=bool(args.undo))
         print(message)
@@ -129,7 +178,13 @@ def main(argv=None):
         return 0 if ok else 1
 
     if args.command == "check":
-        result = check.result(args.path)
+        if not os.path.exists(args.path):
+            raise report.CouldNotRun(f"{args.path} does not exist. Check the path and try again.")
+        try:
+            result = check.result(args.path)
+        except OSError as e:
+            raise report.CouldNotRun(f"Windows would not let gotchu read {args.path} ({e.strerror or e}). "
+                                     "Try a copy in your Downloads folder.") from None
     elif args.command == "tripwire":
         result = tripwire.result()
     elif args.command == "exposure":

@@ -96,7 +96,8 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 
 ### C. Decoys and tripwire - decoys done, real stores in observe mode
 - As built: `gotchu tripwire` plants four decoy wallet files (only for apps that are not installed). A
-  watcher in Program Files, started at sign-in with administrator rights, shows an alarm when one is read
+  watcher in Program Files (since 2026-11-13 run as SYSTEM from start-up, so it works on standard accounts;
+  at first it ran at sign-in with the user's administrator rights) shows an alarm when one is read
   and, with `--cut`, blocks that program from the internet. Owner's choice: start alert-only, then cut.
 - Verified live on Windows 11 Home with a renamed copy of curl: alarm logged, that program lost its
   internet, other programs kept theirs; `--off` removed everything it had added.
@@ -107,6 +108,10 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 - Deliberately no alarm for real stores yet. The drop rule below needs a count of honest readers
   (backup tools, antivirus, sync) first; the list is that measurement.
 - Known gap: GotchU's own `exposure` report reads these stores, so it appears in the list as python.exe.
+- Fixed 2026-11-13 after review: removing decoys deleted the whole app folder, which would have taken a
+  wallet app installed there later with it. Decoys now carry a fingerprint and only they are deleted;
+  a decoy a real app has moved in with is retired. Signed programs installed in Program Files that read
+  a decoy (antivirus, backup) are listed for review instead of alarmed and cut off.
 - Still to do: turn the list into an alarm after the soak; a page in the window; decoys that are not wallets.
 - First, test on this PC whether Windows Home records file reads (`auditpol`, event 4663). Guides say it
   does; a Microsoft forum thread reports cases where the event never appears. One permission prompt, one

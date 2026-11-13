@@ -5,7 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from gotchu import exposure, report
+from gotchu import exposure, report, tripwire
 
 SECRET = "hunter2-do-not-print"
 
@@ -47,6 +47,17 @@ class ExposureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             env = {"LOCALAPPDATA": home, "APPDATA": home, "USERPROFILE": home}
             self.assertEqual(report.level(exposure.analyse(exposure.collect(env))), "ok")
+
+    def test_a_real_wallet_in_a_decoy_folder_is_still_counted(self):
+        with tempfile.TemporaryDirectory() as home:
+            env = {"LOCALAPPDATA": home, "APPDATA": os.path.join(home, "Roaming"), "USERPROFILE": home}
+            os.makedirs(env["APPDATA"])
+            decoys, _, _ = tripwire._plant(env["APPDATA"], os.path.join(home, "decoys.json"))
+            self.assertEqual(exposure.collect(env, decoys=decoys), [])     # gotchu's decoys are not real wallets
+            with open(os.path.join(env["APPDATA"], "Exodus", "exodus.wallet", "passphrase.json"), "w") as f:
+                f.write("{}")
+            found = [(i["kind"], i["name"]) for i in exposure.collect(env, decoys=decoys)]
+            self.assertEqual(found, [("wallet", "Exodus wallet")])
 
 
 if __name__ == "__main__":

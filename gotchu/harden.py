@@ -4,15 +4,18 @@ Every lock states what it stops, what gets less convenient, and what to do inste
 user declines. Changing a lock saves the previous setting first, so undo is exact.
 `analyse()` is pure so it can be tested with made-up states.
 """
-import json
+import base64
 import os
-import subprocess
 
-from . import report
+from . import admin, report
 from .report import INFO, MEDIUM
 
 HERE = os.path.dirname(__file__)
-JOURNAL = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gotchu", "journal")
+# Written only by the elevated helper, in a folder only an administrator can change.
+JOURNAL = os.path.join(admin.INSTALLED, "journal")
+# Where earlier versions kept it, in a folder any program can change. Handed to the helper once (it
+# checks every value), then deleted.
+LEGACY_JOURNAL = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gotchu", "journal")
 
 # Attack-surface-reduction rules gotchu turns on (IDs from Microsoft's ASR rules reference).
 # Left out on purpose because Microsoft documents them as noisy or heuristic on personal PCs:
@@ -41,7 +44,8 @@ LOCKS = [
      "on": lambda s: s.get("smart_app_control") == 1,
      "name": "Only trusted programs can run (Smart App Control)",
      "stops": "Stops unknown and unsigned programs from starting at all - fake installers and planted DLLs never run.",
-     "cost": "Unsigned tools, cracks and some small apps will not run, and there is no per-app exception.",
+     "cost": "Unsigned tools, cracks and some small apps will not run, and there is no per-app exception. That "
+             "includes the gotchu command pip makes: use python -m gotchu instead.",
      "alternative": "Turn it on in Windows Security > App & browser control (no reinstall needed on recent "
                     "Windows 11). If you decline: check every download with gotchu before opening it."},
     {"key": "asr", "can_apply": True,
@@ -91,9 +95,7 @@ BY_KEY = {lock["key"]: lock for lock in LOCKS}
 
 
 def collect():
-    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                          "-File", os.path.join(HERE, "harden.ps1")], capture_output=True, timeout=120)
-    return json.loads(out.stdout.decode("utf-8", "replace"))
+    return report.powershell_json(os.path.join(HERE, "harden.ps1"), "reading your protection settings", timeout=120)
 
 
 def analyse(state):
@@ -122,9 +124,14 @@ def result():
     }
     locks = [{"key": k["key"], "name": k["name"], "stops": k["stops"], "cost": k["cost"],
               "alternative": k["alternative"], "on": bool(k["on"](state)), "can_apply": k["can_apply"],
-              "can_undo": os.path.exists(os.path.join(JOURNAL, k["key"] + ".json"))} for k in LOCKS]
+              "can_undo": _saved(k["key"])} for k in LOCKS]
     return report.build(f"{state.get('edition', 'this PC')} (build {state.get('build', '?')})",
                         findings, labels, locks=locks)
+
+
+def _saved(key):
+    """Did gotchu save the setting from before it changed this lock? Then it can put it back."""
+    return any(os.path.exists(os.path.join(folder, key + ".json")) for folder in (JOURNAL, LEGACY_JOURNAL))
 
 
 def change(key, undo=False):
@@ -135,27 +142,18 @@ def change(key, undo=False):
     lock = BY_KEY.get(key)
     if not lock or not lock["can_apply"]:
         return False, "gotchu cannot change that protection; turn it on in Windows Security."
-    if undo and not os.path.exists(os.path.join(JOURNAL, key + ".json")):
+    if undo and not _saved(key):
         return False, "gotchu did not turn that on, so there is nothing to undo."
-    os.makedirs(JOURNAL, exist_ok=True)
-    result_file = os.path.join(JOURNAL, key + ".result")
-    if os.path.exists(result_file):
-        os.remove(result_file)
-
-    args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", f'"{os.path.join(HERE, "harden_apply.ps1")}"',
-            "-Lock", key, "-JournalDir", f'"{JOURNAL}"', "-AsrIds", ",".join(ASR_RULES)] + (["-Undo"] if undo else [])
-    listed = ",".join("'" + a.replace("'", "''") + "'" for a in args)
-    subprocess.run(["powershell.exe", "-NoProfile", "-Command",
-                    f"Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList {listed}"],
-                   capture_output=True, timeout=300)
-
-    if not os.path.exists(result_file):
-        return False, "Nothing was changed: the Windows permission prompt was declined or closed."
-    with open(result_file, encoding="utf-8-sig") as f:
-        outcome = f.read().strip()
-    os.remove(result_file)
-    if outcome != "ok":
-        return False, "Windows refused the change. " + outcome.removeprefix("error: ")
+    args = ["-Lock", key, "-AsrIds", ",".join(ASR_RULES)] + (["-Undo"] if undo else [])
+    legacy = os.path.join(LEGACY_JOURNAL, key + ".json")
+    if os.path.exists(legacy) and not os.path.exists(os.path.join(JOURNAL, key + ".json")):
+        with open(legacy, "rb") as f:
+            args += ["-Legacy", base64.b64encode(f.read()).decode()]
+    ok, message = admin.run("harden_apply.ps1", args)
+    if not ok:
+        return False, message
+    if os.path.exists(legacy):
+        os.remove(legacy)    # the helper now holds it, or it has been used to undo
     now_on = lock["on"](collect())
     if undo:
         return True, "Put back the way it was."

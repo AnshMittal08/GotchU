@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,8 @@ name = "gotchu"
 dynamic = ["version"]
 description = "Free, local protection for Windows against password-stealing malware: it guards the safe, not just the door."
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = []   # standard library only, on purpose: every dependency is a supply-chain risk
 keywords = ["security", "windows", "infostealer", "malware", "hardening"]

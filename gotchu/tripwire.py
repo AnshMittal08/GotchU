@@ -11,18 +11,17 @@ alarm yet: first we measure how often honest programs do it.
 Limits, stated plainly: the alarm fires for decoys only; the internet block applies to the
 program that did the reading; malware that injects itself into the real browser looks like the owner.
 """
+import hashlib
 import json
 import os
-import shutil
-import subprocess
 
-from . import report
+from . import admin, report
 from .report import HIGH, INFO, MEDIUM
 
-HERE = os.path.dirname(__file__)
 LOCAL = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gotchu")
 STATE = os.path.join(LOCAL, "decoys.json")           # what gotchu planted, so it can remove exactly that
-INSTALLED = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "gotchu")
+INSTALLED = admin.INSTALLED                          # watcher, its settings and its logs: admin-only
+DECOY_SIZE = 2048
 
 # Fake wallets, by the folder the real app would use. Skipped when that folder already exists.
 DECOYS = [
@@ -75,62 +74,159 @@ def guarded(env=None, secrets=None):
     return out
 
 
-def _state():
+def load_state(path=STATE):
+    """What gotchu planted: decoy folders, decoy files and a fingerprint of each file."""
     try:
-        with open(STATE, encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
     except (OSError, ValueError):
-        return {"roots": [], "files": []}
+        saved = {}
+    return {"roots": saved.get("roots", []), "files": saved.get("files", []), "hashes": saved.get("hashes", {})}
 
 
-def decoy_roots():
-    return _state()["roots"]
+def _within(path, folder):
+    path, folder = os.path.normcase(os.path.abspath(path)), os.path.normcase(os.path.abspath(folder))
+    return path == folder or path.startswith(folder.rstrip(os.sep) + os.sep)
 
 
-def _plant():
-    state = _state()
-    if state["files"]:
-        return state
-    for root, file in plan(os.environ["APPDATA"]):
+def _ours(file, state):
+    """Is this still the decoy gotchu planted, unchanged? A wallet app installed since may have written over it."""
+    want = state["hashes"].get(file)
+    try:
+        if want:
+            with open(file, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest() == want
+        return os.path.getsize(file) == DECOY_SIZE   # planted by a version that kept no fingerprint
+    except OSError:
+        return False
+
+
+def _foreign(folder, state):
+    """The first file under folder that is not one of gotchu's unchanged decoys, or None."""
+    planted = {os.path.normcase(f): f for f in state["files"]}
+    for root, _, files in os.walk(folder):
+        for name in files:
+            path = os.path.join(root, name)
+            original = planted.get(os.path.normcase(path))
+            if original is None or not _ours(original, state):
+                return path
+    return None
+
+
+def only_decoys(path, state=None):
+    """True when path holds nothing but gotchu's own decoys, so it is not a real wallet."""
+    state = load_state() if state is None else state
+    if not any(_within(path, root) for root in state["roots"]):
+        return False
+    if os.path.isdir(path):
+        return _foreign(path, state) is None
+    original = next((f for f in state["files"] if os.path.normcase(f) == os.path.normcase(path)), None)
+    return original is not None and _ours(original, state)
+
+
+def moved_in(state=None):
+    """Decoy folders that another program, most likely the real wallet app, now uses too."""
+    state = load_state() if state is None else state
+    return [root for root in state["roots"] if os.path.isdir(root) and _foreign(root, state)]
+
+
+def _clear(root, state):
+    """Delete gotchu's decoys under root, then the folders it made for them if they are now empty.
+
+    Nothing else is ever deleted: a wallet app installed since may keep real data in the same folder.
+    Returns the decoy files that had to be left in place.
+    """
+    alone = _foreign(root, state) is None
+    left = []
+    for file in [f for f in state["files"] if _within(f, root) and os.path.exists(f)]:
+        # Without a fingerprint, the file is only deleted when nothing else has moved into its folder.
+        if not _ours(file, state) or (file not in state["hashes"] and not alone):
+            left.append(file)
+            continue
+        os.remove(file)
+        folder = os.path.dirname(file)
+        while _within(folder, root):
+            try:
+                os.rmdir(folder)    # succeeds only on an empty folder
+            except OSError:
+                break
+            folder = os.path.dirname(folder)
+    return left
+
+
+def _drop(state, root):
+    gone = [f for f in state["files"] if _within(f, root)]
+    state["roots"] = [r for r in state["roots"] if r != root]
+    state["files"] = [f for f in state["files"] if f not in gone]
+    for f in gone:
+        state["hashes"].pop(f, None)
+
+
+def _plant(appdata=None, path=STATE):
+    """Retire decoys whose folder a real app now uses, then plant any that are missing.
+
+    Returns (state, retired folders, decoy files left in place).
+    """
+    state = load_state(path)
+    retired, left = [], []
+    for root in list(state["roots"]):
+        if os.path.isdir(root) and _foreign(root, state):
+            left += _clear(root, state)
+            retired.append(root)
+        if root in retired or not os.path.isdir(root):
+            _drop(state, root)
+    for root, file in plan(appdata or os.environ["APPDATA"]):
         os.makedirs(os.path.dirname(file))
+        data = os.urandom(DECOY_SIZE)   # meaningless bytes; there is no real wallet in it
         with open(file, "wb") as f:
-            f.write(os.urandom(2048))   # meaningless bytes; there is no real wallet in it
+            f.write(data)
         state["roots"].append(root)
         state["files"].append(file)
-    os.makedirs(LOCAL, exist_ok=True)
-    with open(STATE, "w", encoding="utf-8") as f:
+        state["hashes"][file] = hashlib.sha256(data).hexdigest()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(state, f)
-    return state
+    return state, retired, left
 
 
-def _remove_decoys():
-    for root in _state()["roots"]:
-        shutil.rmtree(root, ignore_errors=True)
-    if os.path.exists(STATE):
-        os.remove(STATE)
+def _remove_decoys(path=STATE):
+    """Remove every decoy gotchu planted. Returns the decoy files that had to be left in place."""
+    state = load_state(path)
+    left = []
+    for root in state["roots"]:
+        if os.path.isdir(root):
+            left += _clear(root, state)
+    if os.path.exists(path):
+        os.remove(path)
+    return left
+
+
+def _note(retired, left):
+    out = ""
+    if retired:
+        out += " Retired the decoy in " + ", ".join(retired) + ": a wallet app now uses that folder."
+    if left:
+        out += (" Left in place because a wallet app now uses the folder or has changed the file: " + ", ".join(left)
+                + ". Delete these yourself only if you are sure they are not real wallet files.")
+    return out
 
 
 def _elevated(action, cut=False):
-    os.makedirs(LOCAL, exist_ok=True)
-    result_file, plan_file = os.path.join(LOCAL, "tripwire.result"), os.path.join(LOCAL, "tripwire.plan")
-    if os.path.exists(result_file):
-        os.remove(result_file)
-    with open(plan_file, "w", encoding="utf-8") as f:
-        json.dump({"decoys": _state()["files"], "stores": guarded() if action == "on" else []}, f)
-    args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", f'"{os.path.join(HERE, "tripwire_apply.ps1")}"',
-            "-Action", action, "-Source", f'"{HERE}"', "-PlanFile", f'"{plan_file}"',
-            "-ResultFile", f'"{result_file}"'] + (["-Cut"] if cut else [])
-    listed = ",".join("'" + a.replace("'", "''") + "'" for a in args)
-    subprocess.run(["powershell.exe", "-NoProfile", "-Command",
-                    f"Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList {listed}"],
-                   capture_output=True, timeout=300)
-    os.remove(plan_file)
-    if not os.path.exists(result_file):
-        return False, "Nothing was changed: the Windows permission prompt was declined or closed."
-    with open(result_file, encoding="utf-8-sig") as f:
-        outcome = f.read().strip()
-    os.remove(result_file)
-    return (True, "") if outcome == "ok" else (False, "Windows refused the change. " + outcome.removeprefix("error: "))
+    args = ["-Action", action] + (["-Cut"] if cut else [])
+    plan_file = os.path.join(LOCAL, "tripwire.plan")
+    if action == "on":
+        state = load_state()
+        data = json.dumps({"decoys": state["files"], "roots": state["roots"], "stores": guarded()}).encode("utf-8")
+        os.makedirs(LOCAL, exist_ok=True)
+        with open(plan_file, "wb") as f:
+            f.write(data)
+        # Any program can change that folder, so the helper uses the plan only if it is exactly these bytes.
+        args += ["-PlanFile", f'"{plan_file}"', "-PlanHash", hashlib.sha256(data).hexdigest()]
+    try:
+        return admin.run("tripwire_apply.ps1", args)
+    finally:
+        if os.path.exists(plan_file):
+            os.remove(plan_file)
 
 
 def status():
@@ -141,6 +237,7 @@ def status():
         out.update(on=True, cut=bool(cfg.get("cut")), decoys=cfg.get("decoys") or [], stores=cfg.get("stores") or [])
     except (OSError, ValueError):
         return out
+    out["moved_in"] = moved_in()
     for kind in ("alerts", "sightings"):
         try:
             with open(os.path.join(INSTALLED, kind + ".jsonl"), encoding="utf-8-sig") as f:
@@ -153,22 +250,42 @@ def status():
 def change(action, cut=False):
     """action: 'on', 'off' or 'restore' (lift internet blocks). Returns (ok, message)."""
     if action == "on":
-        had_decoys = bool(_state()["files"])
-        if not _plant()["files"]:
-            return False, "No decoys could be planted: every wallet app gotchu imitates is already installed."
+        had_decoys = bool(load_state()["files"])
+        state, retired, left = _plant()
+        if not state["files"]:
+            return False, ("No decoys could be planted: every wallet app gotchu imitates is already installed."
+                           + _note(retired, left))
         ok, message = _elevated("on", cut)
         if not ok:
             if not had_decoys:
                 _remove_decoys()
             return False, message
-        return True, "Tripwire is on" + (", and a program that trips it loses its internet." if cut else ", alert only.")
+        return True, ("Tripwire is on" + (", and a program that trips it loses its internet." if cut else ", alert only.")
+                      + _note(retired, left))
     ok, message = _elevated(action)
     if not ok:
         return False, message
     if action == "off":
-        _remove_decoys()
-        return True, "Tripwire is off. Decoys removed and Windows' setting put back."
+        left = _remove_decoys()
+        return True, "Tripwire is off. Decoys removed and Windows' setting put back." + _note([], left)
     return True, "Internet blocks lifted and the alarm cleared."
+
+
+def _sighting(s):
+    """A read that is listed for review rather than alarmed."""
+    head = f"At {s['time'].replace('T', ' ')}. Program: {s['program']}."
+    if s.get("kind") != "decoy":
+        return (MEDIUM, f"{os.path.basename(s['program'])} read {s['store']}",
+                f"{head} This is not the program that owns that data. A backup or security tool can be harmless; "
+                "anything you do not recognise is worth a scan.")
+    if s.get("reason") == "moved_in":
+        why = ("The decoy's folder now also holds another program's files, so the real wallet app was probably "
+               "installed there since. Run gotchu tripwire --on to retire the decoy.")
+    else:
+        why = ("It is installed in Program Files and signed by its maker, so it was listed instead of raising the "
+               "alarm or losing its internet: antivirus and backup tools read every file.")
+    return (MEDIUM, f"{os.path.basename(s['program'])} read a decoy wallet file",
+            f"{head} {why} If you do not recognise it, run a scan.")
 
 
 def analyse(state):
@@ -179,10 +296,11 @@ def analyse(state):
                  f"Program: {a['program']}." + (" gotchu blocked it from the internet." if a.get("cut") else "")
                  + " If this was not you, run a scan and change your passwords from another device.")
                 for a in reversed(state["alerts"])]
-    findings += [(MEDIUM, f"{os.path.basename(s['program'])} read {s['store']}",
-                  f"At {s['time'].replace('T', ' ')}. Program: {s['program']}. This is not the program that owns that "
-                  "data. A backup or security tool can be harmless; anything you do not recognise is worth a scan.")
-                 for s in reversed(state["sightings"])]
+    findings += [(MEDIUM, f"A wallet app now uses a decoy folder: {root}",
+                  "The decoy there is no longer a reliable trap, and the real app may trip it. Run gotchu tripwire --on "
+                  "to retire it: gotchu deletes only its own decoy file, never the app's data.")
+                 for root in state.get("moved_in", [])]
+    findings += [_sighting(s) for s in reversed(state["sightings"])]
     mode = "A program that trips a decoy loses its internet." if state["cut"] else "Alert only."
     findings.append((INFO, f"The tripwire is on: {len(state['decoys'])} decoys, {len(state['stores'])} real stores watched",
                      mode + " Reads of real stores by other programs are listed here, without an alarm for now."))
@@ -191,7 +309,8 @@ def analyse(state):
 
 def result():
     state = status()
-    review = ("PROGRAMS TO REVIEW", "Other programs read your browser or chat logins. Check that you recognise each one.")
+    review = ("WORTH A LOOK", "Each item below says what was seen and what to do: programs other than the owner "
+              "that read your logins or a decoy, and decoys that need retiring.")
     labels = {
         "danger": ("THE TRIPWIRE WAS TRIPPED", "Something read a decoy that no honest program touches."),
         "warn": review if state["on"] else ("TRIPWIRE OFF", "Nothing is watching for a thief sweeping this PC."),
