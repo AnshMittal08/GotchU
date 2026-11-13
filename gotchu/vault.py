@@ -127,17 +127,45 @@ def create(passphrase, folder=FOLDER):
         raise FileExistsError("There is already a vault here.")
     os.makedirs(folder, exist_ok=True)
     data_key = secrets.token_bytes(32)
-    recovery = base64.b32encode(secrets.token_bytes(20)).decode()
+    recovery = _new_recovery()
     header = {"version": 1, "passphrase": _slot(passphrase, data_key), "recovery": _slot(recovery, data_key)}
     _save_header(header, folder)
     _save_index(data_key, {}, folder)
+    return _grouped(recovery)
+
+
+def _new_recovery():
+    return base64.b32encode(secrets.token_bytes(20)).decode()
+
+
+def _grouped(recovery):
     return "-".join(recovery[i:i + 4] for i in range(0, len(recovery), 4))
+
+
+def _load_header(folder):
+    with open(os.path.join(folder, "vault.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def change_passphrase(data_key, passphrase, folder=FOLDER):
+    """Wrap the data key under a new passphrase. The old one stops working; the files are not touched."""
+    header = _load_header(folder)
+    header["passphrase"] = _slot(passphrase, data_key)
+    _save_header(header, folder)
+
+
+def replace_recovery(data_key, folder=FOLDER):
+    """Make a new recovery key; the old one stops working. Returns the new key - shown once, never stored."""
+    recovery = _new_recovery()
+    header = _load_header(folder)
+    header["recovery"] = _slot(recovery, data_key)
+    _save_header(header, folder)
+    return _grouped(recovery)
 
 
 def unlock(secret, folder=FOLDER):
     """Returns the data key for a correct passphrase or recovery key; raises WrongSecret otherwise."""
-    with open(os.path.join(folder, "vault.json"), encoding="utf-8") as f:
-        header = json.load(f)
+    header = _load_header(folder)
     for slot, candidate in (("passphrase", secret), ("recovery", _tidy_recovery(secret))):
         entry = header[slot]
         try:

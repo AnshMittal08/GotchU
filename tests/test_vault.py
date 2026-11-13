@@ -44,6 +44,23 @@ class VaultTests(unittest.TestCase):
             with self.assertRaises(vault.WrongSecret):                       # tampering is detected
                 vault.get(key, "server.pem", folder)
 
+    def test_forgotten_passphrase_and_lost_recovery_key_can_be_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder, original = os.path.join(tmp, "vault"), os.path.join(tmp, "server.pem")
+            with open(original, "wb") as f:
+                f.write(SECRET)
+            old_recovery = vault.create("correct horse battery", folder)
+            vault.add(vault.unlock("correct horse battery", folder), original, folder)
+
+            key = vault.unlock(old_recovery, folder)                        # passphrase forgotten
+            vault.change_passphrase(key, "new staple passphrase", folder)
+            new_recovery = vault.replace_recovery(key, folder)              # the paper was lost
+            for gone in ("correct horse battery", old_recovery):
+                with self.assertRaises(vault.WrongSecret):
+                    vault.unlock(gone, folder)
+            for secret in ("new staple passphrase", new_recovery):
+                self.assertEqual(vault.get(vault.unlock(secret, folder), "server.pem", folder), SECRET)
+
     def test_a_vault_from_before_the_stronger_setting_opens_and_is_upgraded(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = os.path.join(tmp, "vault")

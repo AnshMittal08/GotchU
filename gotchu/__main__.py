@@ -6,6 +6,23 @@ import sys
 from . import __version__, check, exposure, harden, report, scan, tripwire
 
 
+def _choose_passphrase(getpass, prompt, nothing):
+    """Ask for a new passphrase twice. None (after saying why) if it is too short or the two differ."""
+    passphrase = getpass.getpass(f"{prompt} (at least 10 characters; a few random words work well): ")
+    if len(passphrase) < 10:
+        print(f"Too short. {nothing}")
+        return None
+    if passphrase != getpass.getpass("Type it again: "):
+        print(f"The two did not match. {nothing}")
+        return None
+    return passphrase
+
+
+RECOVERY_NOTE = ("Write this on paper now and keep it away from this PC. It is shown only once.\n"
+                 "If you forget the passphrase, this key is the only other way in. Lose both and the\n"
+                 "files in the vault are gone for good.")
+
+
 def _vault(args):
     import getpass
     import os
@@ -16,18 +33,11 @@ def _vault(args):
             if vault.exists():
                 print("There is already a vault on this PC.")
                 return 1
-            passphrase = getpass.getpass("Choose a passphrase (at least 10 characters; a few random words work well): ")
-            if len(passphrase) < 10:
-                print("Too short. Nothing was created.")
-                return 1
-            if passphrase != getpass.getpass("Type it again: "):
-                print("The two did not match. Nothing was created.")
+            passphrase = _choose_passphrase(getpass, "Choose a passphrase", "Nothing was created.")
+            if passphrase is None:
                 return 1
             recovery = vault.create(passphrase)
-            print(f"\nVault created in {vault.FOLDER}\n\nRECOVERY KEY:  {recovery}\n\n"
-                  "Write this on paper now and keep it away from this PC. It is shown only once.\n"
-                  "If you forget the passphrase, this key is the only other way in. Lose both and the\n"
-                  "files in the vault are gone for good.")
+            print(f"\nVault created in {vault.FOLDER}\n\nRECOVERY KEY:  {recovery}\n\n{RECOVERY_NOTE}")
             return 0
         if not vault.exists():
             print("There is no vault yet. Make one with: gotchu vault create")
@@ -56,6 +66,15 @@ def _vault(args):
                 print("Give the command to run, for example: gotchu vault use server.pem -- ssh -i {} user@host")
                 return 1
             return vault.use(key, args.name, command)
+        elif args.action == "passphrase":
+            passphrase = _choose_passphrase(getpass, "Choose a new passphrase", "Nothing was changed.")
+            if passphrase is None:
+                return 1
+            vault.change_passphrase(key, passphrase)
+            print("Passphrase changed. The old one no longer opens the vault; your recovery key still does.")
+        elif args.action == "recovery":
+            recovery = vault.replace_recovery(key)
+            print(f"\nNEW RECOVERY KEY:  {recovery}\n\nThe old recovery key no longer opens the vault.\n{RECOVERY_NOTE}")
         else:
             vault.remove(key, args.name)
             print(f"{args.name} removed from the vault.")
@@ -121,6 +140,8 @@ def main(argv=None):
     a.add_argument("run", nargs=argparse.REMAINDER, help="the command; {} is replaced by the file's path")
     a = act.add_parser("remove", help="delete a file from the vault")
     a.add_argument("name")
+    act.add_parser("passphrase", help="choose a new passphrase (opens with the old one or the recovery key)")
+    act.add_parser("recovery", help="make a new recovery key; the old one stops working")
     p = sub.add_parser("setup", help="install or update gotchu's administrator helpers in Program Files")
     p.add_argument("--remove", action="store_true", help="remove them, once nothing gotchu turned on still needs them")
     p = sub.add_parser("ui", help="open the gotchu window in your browser")
