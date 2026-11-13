@@ -14,15 +14,13 @@ program that did the reading; malware that injects itself into the real browser 
 import hashlib
 import json
 import os
-import subprocess
 
-from . import report
+from . import admin, report
 from .report import HIGH, INFO, MEDIUM
 
-HERE = os.path.dirname(__file__)
 LOCAL = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gotchu")
 STATE = os.path.join(LOCAL, "decoys.json")           # what gotchu planted, so it can remove exactly that
-INSTALLED = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "gotchu")
+INSTALLED = admin.INSTALLED                          # watcher, its settings and its logs: admin-only
 DECOY_SIZE = 2048
 
 # Fake wallets, by the folder the real app would use. Skipped when that folder already exists.
@@ -214,26 +212,21 @@ def _note(retired, left):
 
 
 def _elevated(action, cut=False):
-    os.makedirs(LOCAL, exist_ok=True)
-    result_file, plan_file = os.path.join(LOCAL, "tripwire.result"), os.path.join(LOCAL, "tripwire.plan")
-    if os.path.exists(result_file):
-        os.remove(result_file)
-    with open(plan_file, "w", encoding="utf-8") as f:
-        json.dump({"decoys": load_state()["files"], "stores": guarded() if action == "on" else []}, f)
-    args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", f'"{os.path.join(HERE, "tripwire_apply.ps1")}"',
-            "-Action", action, "-Source", f'"{HERE}"', "-PlanFile", f'"{plan_file}"',
-            "-ResultFile", f'"{result_file}"'] + (["-Cut"] if cut else [])
-    listed = ",".join("'" + a.replace("'", "''") + "'" for a in args)
-    subprocess.run(["powershell.exe", "-NoProfile", "-Command",
-                    f"Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList {listed}"],
-                   capture_output=True, timeout=300)
-    os.remove(plan_file)
-    if not os.path.exists(result_file):
-        return False, "Nothing was changed: the Windows permission prompt was declined or closed."
-    with open(result_file, encoding="utf-8-sig") as f:
-        outcome = f.read().strip()
-    os.remove(result_file)
-    return (True, "") if outcome == "ok" else (False, "Windows refused the change. " + outcome.removeprefix("error: "))
+    args = ["-Action", action] + (["-Cut"] if cut else [])
+    plan_file = os.path.join(LOCAL, "tripwire.plan")
+    if action == "on":
+        state = load_state()
+        data = json.dumps({"decoys": state["files"], "roots": state["roots"], "stores": guarded()}).encode("utf-8")
+        os.makedirs(LOCAL, exist_ok=True)
+        with open(plan_file, "wb") as f:
+            f.write(data)
+        # Any program can change that folder, so the helper uses the plan only if it is exactly these bytes.
+        args += ["-PlanFile", f'"{plan_file}"', "-PlanHash", hashlib.sha256(data).hexdigest()]
+    try:
+        return admin.run("tripwire_apply.ps1", args)
+    finally:
+        if os.path.exists(plan_file):
+            os.remove(plan_file)
 
 
 def status():

@@ -257,7 +257,7 @@
     b.addEventListener("click", async () => {
       const all = [...document.querySelectorAll("#view-harden button")];
       all.forEach((x) => (x.disabled = true));
-      $("harden-note").textContent = "Windows is asking for your permission. Choose Yes in the prompt.";
+      $("harden-note").textContent = "Windows is asking for your permission (twice the first time). Choose Yes in each prompt.";
       try {
         const { message, result } = await api("/api/harden/change", { key, undo });
         showLocks($("harden-out"), result);

@@ -1,16 +1,17 @@
-# Turns the tripwire on or off, or lifts its internet blocks. Runs elevated (Windows asks first).
-# Everything it changes is put back by -Action off.
+# Turns the tripwire on or off, or lifts its internet blocks. Runs elevated from Program Files\gotchu
+# (Windows asks first). Everything it changes is put back by -Action off.
+# Exit code 0 means done; otherwise the reason is in last-error.txt beside this script.
 param(
     [ValidateSet('on', 'off', 'restore')][string]$Action,
-    [string]$Source,        # folder holding tripwire_watch.ps1
-    [string]$PlanFile,      # JSON: { decoys: [path], stores: [{ path, dir, name, owners, signer }] }
-    [string]$ResultFile,
+    [string]$PlanFile,      # JSON: { decoys: [path], roots: [path], stores: [{ path, dir, name, owners, signer }] }
+    [string]$PlanHash,      # SHA-256 of the plan as gotchu wrote it
     [switch]$Cut
 )
 $FS = '{0CCE921D-69AE-11D9-BED3-505054503030}'   # "File System" audit subcategory, same in every language
 $auditpol = "$env:windir\System32\auditpol.exe"
-$dest = Join-Path $env:ProgramFiles 'gotchu'    # admin-only: an ordinary program cannot change what runs elevated
+$dest = $PSScriptRoot                           # Program Files\gotchu: admin-only, as is the watcher beside this script
 $config = Join-Path $dest 'tripwire.json'
+$errorFile = Join-Path $dest 'last-error.txt'
 $task = 'gotchu tripwire'
 
 function Remove-Cuts { & "$env:windir\System32\netsh.exe" advfirewall firewall delete rule name="gotchu cut" | Out-Null }
@@ -31,18 +32,27 @@ function Set-Watch([string]$path, [bool]$isDir, [bool]$remove) {
     if ($isDir) { [System.IO.Directory]::SetAccessControl($path, $sec) } else { [System.IO.File]::SetAccessControl($path, $sec) }
 }
 
+# The plan sits in a folder any program can change. It is read once and used only if those bytes are
+# exactly what gotchu wrote, so nothing can swap in its own list in between.
+function Read-Plan {
+    $bytes = [System.IO.File]::ReadAllBytes($PlanFile)
+    $hash = -join ([System.Security.Cryptography.SHA256]::Create().ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') })
+    if ($hash -ne "$PlanHash".ToLower()) { throw 'The list of files to watch changed after gotchu wrote it, so nothing was changed.' }
+    return [System.Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
+}
+
 try {
+    Remove-Item -LiteralPath $errorFile -Force -ErrorAction SilentlyContinue
     if ($Action -eq 'restore') {
         Remove-Cuts
         # The alarm has been dealt with: keep it as history, stop showing it as current.
-        foreach ($name in 'alerts', 'sightings') {
-            $log = Join-Path $dest "$name.jsonl"
-            if (Test-Path $log) { Get-Content $log | Add-Content (Join-Path $dest "$name.old.jsonl") -Encoding utf8; Remove-Item $log }
-        }
+        # The list of programs to review stays until the tripwire is switched off.
+        $log = Join-Path $dest 'alerts.jsonl'
+        if (Test-Path $log) { Get-Content $log | Add-Content (Join-Path $dest 'alerts.old.jsonl') -Encoding utf8; Remove-Item $log }
     }
     elseif ($Action -eq 'on') {
-        New-Item -ItemType Directory -Force $dest | Out-Null
-        Copy-Item (Join-Path $Source 'tripwire_watch.ps1') $dest -Force
+        if (-not (Test-Path -LiteralPath (Join-Path $dest 'tripwire_watch.ps1'))) { throw 'The watcher is missing. Run: gotchu setup' }
+        $plan = Read-Plan
 
         # Remember the audit setting from before the first switch-on, so off restores it exactly.
         $before = (& $auditpol /get /subcategory:$FS /r | ConvertFrom-Csv).'Inclusion Setting'
@@ -55,15 +65,19 @@ try {
                 try { Set-Watch $s.path ([bool]$s.dir) $true } catch { }
             }
         }
-        $plan = Get-Content $PlanFile -Raw | ConvertFrom-Json
         $decoys = @($plan.decoys | Where-Object { $_ -and (Test-Path -LiteralPath $_ -PathType Leaf) } | ForEach-Object { "$_" })
         foreach ($d in $decoys) { Set-Watch $d $false $false }
+        # The folder each decoy was planted in, so the watcher can tell when a real app has moved in since.
+        $roots = @(foreach ($r in @($plan.roots)) {
+            $low = "$r".ToLower()
+            if ($r -and ($decoys | Where-Object { $_.ToLower().StartsWith($low + '\') })) { "$r" }
+        })
         # A real store that cannot be watched (in use, or gone) is skipped, not fatal: the decoys still work.
         $stores = @()
         foreach ($s in @($plan.stores)) {
             try { Set-Watch $s.path ([bool]$s.dir) $false; $stores += $s } catch { }
         }
-        @{ decoys = $decoys; stores = $stores; cut = [bool]$Cut; audit_before = $before } |
+        @{ decoys = $decoys; decoy_roots = $roots; stores = $stores; cut = [bool]$Cut; audit_before = $before } |
             ConvertTo-Json -Depth 5 | Set-Content $config -Encoding utf8
 
         $user = "$env:USERDOMAIN\$env:USERNAME"
@@ -88,9 +102,13 @@ try {
             $before = $old.audit_before
             if ($before -notlike '*Success*') { & $auditpol /set /subcategory:$FS /success:disable | Out-Null }
         }
-        Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+        # Only the tripwire's own files: the helpers stay for harden and for switching on again (gotchu setup --remove).
+        foreach ($name in 'tripwire.json', 'alerts.jsonl', 'alerts.old.jsonl', 'sightings.jsonl', 'sightings.old.jsonl') {
+            Remove-Item -LiteralPath (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue
+        }
     }
-    'ok' | Set-Content $ResultFile -Encoding utf8
 } catch {
-    "error: $_" | Set-Content $ResultFile -Encoding utf8
+    "$_" | Set-Content -LiteralPath $errorFile -Encoding utf8
+    exit 1
 }
+exit 0

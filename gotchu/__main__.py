@@ -68,6 +68,20 @@ def _vault(args):
     return 1
 
 
+def _setup(args):
+    from . import admin
+    ok, message = admin.remove() if args.remove else admin.install()
+    print(message)
+    if ok and not args.remove:
+        if admin.own_folder_writable():
+            print(f"\nNote: gotchu itself is in a folder your account can change ({admin.HERE}). A program running as\n"
+                  "you could change it, including what it asks Windows to run as administrator. For the strongest\n"
+                  "setup, install gotchu with a Python that is installed for all users, in Program Files.")
+        if tripwire.status()["on"]:
+            print("\nThe tripwire is on: run gotchu tripwire --on once more so its watcher uses the new version.")
+    return 0 if ok else 1
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="gotchu", description="Free, local, read-only PC safety checks.")
     parser.add_argument("--version", action="version", version=__version__)
@@ -106,6 +120,8 @@ def main(argv=None):
     a.add_argument("run", nargs=argparse.REMAINDER, help="the command; {} is replaced by the file's path")
     a = act.add_parser("remove", help="delete a file from the vault")
     a.add_argument("name")
+    p = sub.add_parser("setup", help="install or update gotchu's administrator helpers in Program Files")
+    p.add_argument("--remove", action="store_true", help="remove them, once nothing gotchu turned on still needs them")
     p = sub.add_parser("ui", help="open the gotchu window in your browser")
     p.add_argument("path", nargs="?", help="a download to check as soon as the window opens")
     p.add_argument("--no-browser", action="store_true", help="start without opening a browser")
@@ -117,6 +133,9 @@ def main(argv=None):
 
     if args.command == "vault":
         return _vault(args)
+
+    if args.command == "setup":
+        return _setup(args)
 
     if args.command == "harden" and (args.on or args.undo):
         ok, message = harden.change(args.on or args.undo, undo=bool(args.undo))

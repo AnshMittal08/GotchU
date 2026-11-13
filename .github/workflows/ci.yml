@@ -60,4 +60,4 @@ jobs:
           python -m pip install .
           Set-Location $env:RUNNER_TEMP    # so the installed copy is used, not the checkout
           gotchu --version
-          python -c "from importlib.resources import files; [(files('gotchu') / n).read_bytes() for n in ('ui.html', 'secrets_map.json', 'harden.ps1', 'tripwire_watch.ps1', 'tripwire_apply.ps1')]"
+          python -c "from importlib.resources import files; from gotchu import admin; [(files('gotchu') / n).read_bytes() for n in ('ui.html', 'secrets_map.json', 'harden.ps1', 'collect.ps1', 'browse.ps1', *admin.HELPERS)]"
