@@ -8,6 +8,7 @@ $cfg = Get-Content (Join-Path $PSScriptRoot 'tripwire.json') -Raw | ConvertFrom-
 $log = Join-Path $PSScriptRoot 'alerts.jsonl'
 $decoys = @{}
 foreach ($d in $cfg.decoys) { $decoys[$d.ToLower()] = $true }
+$roots = @($cfg.decoy_roots | Where-Object { $_ } | ForEach-Object { "$_" })
 
 # Windows' own readers of every new file: antivirus and search. Matched on full path, not name.
 function Test-Expected([string]$p) {
@@ -36,18 +37,45 @@ function Find-Store([string]$file) {
     }
 }
 
-# The owner is recognised by file name AND, where the map knows it, by who signed the program -
-# so malware that merely calls itself chrome.exe does not pass.
+# Who signed a program, if the signature is valid; '' otherwise. Remembered per program.
 $signers = @{}
-function Test-Owner([string]$proc, $store) {
-    $name = [System.IO.Path]::GetFileName($proc)
-    if (-not (@($store.owners) | Where-Object { $_ -ieq $name })) { return $false }
-    if (-not $store.signer) { return $true }
+function Get-Signer([string]$proc) {
     if (-not $signers.ContainsKey($proc)) {
         $sig = Get-AuthenticodeSignature -LiteralPath $proc -ErrorAction SilentlyContinue
         $signers[$proc] = if ($sig -and $sig.Status -eq 'Valid') { $sig.SignerCertificate.Subject } else { '' }
     }
-    return $signers[$proc] -like "*O=$($store.signer),*"
+    return $signers[$proc]
+}
+
+# The owner is recognised by file name AND, where the map knows it, by who signed the program -
+# so malware that merely calls itself chrome.exe does not pass.
+function Test-Owner([string]$proc, $store) {
+    $name = [System.IO.Path]::GetFileName($proc)
+    if (-not (@($store.owners) | Where-Object { $_ -ieq $name })) { return $false }
+    if (-not $store.signer) { return $true }
+    return (Get-Signer $proc) -like "*O=$($store.signer),*"
+}
+
+# Antivirus and backup tools read every file, decoys included. A signed program installed in Program Files
+# (which takes administrator rights) is listed for review instead of raising the alarm and losing its internet.
+$installed = @($env:ProgramFiles, ${env:ProgramFiles(x86)} | Where-Object { $_ } | ForEach-Object { $_.ToLower() + '\' })
+function Test-Installed([string]$proc) {
+    $l = $proc.ToLower()
+    if (-not ($installed | Where-Object { $l.StartsWith($_) })) { return $false }
+    return [bool](Get-Signer $proc)
+}
+
+# A decoy whose folder now holds files gotchu did not put there: the real wallet app has most likely been
+# installed since, and reads it. Listed for review until `gotchu tripwire --on` retires that decoy.
+function Test-MovedIn([string]$file) {
+    $l = $file.ToLower()
+    foreach ($r in $roots) {
+        if (-not $l.StartsWith($r.ToLower() + '\')) { continue }
+        $other = Get-ChildItem -LiteralPath $r -Recurse -Force -File -ErrorAction SilentlyContinue |
+            Where-Object { -not $decoys.ContainsKey($_.FullName.ToLower()) } | Select-Object -First 1
+        return [bool]$other
+    }
+    return $false
 }
 
 $query = New-Object System.Diagnostics.Eventing.Reader.EventLogQuery(
@@ -79,6 +107,15 @@ while ($true) {
             ConvertTo-Json -Compress | Add-Content -Path (Join-Path $PSScriptRoot 'sightings.jsonl') -Encoding utf8
         continue
     }
+    $reason = if (Test-MovedIn $file) { 'moved_in' } elseif (Test-Installed $proc) { 'installed' } else { '' }
+    if ($reason) {
+        $key = "$proc|$file"
+        if ($seen[$key] -and ((Get-Date) - $seen[$key]).TotalMinutes -lt 60) { continue }
+        $seen[$key] = Get-Date
+        @{ time = (Get-Date).ToString('s'); program = $proc; store = 'a decoy wallet file'; file = $file; kind = 'decoy'; reason = $reason } |
+            ConvertTo-Json -Compress | Add-Content -Path (Join-Path $PSScriptRoot 'sightings.jsonl') -Encoding utf8
+        continue
+    }
     if ($seen[$proc] -and ((Get-Date) - $seen[$proc]).TotalSeconds -lt 60) { continue }   # one alarm per program per minute
     $seen[$proc] = Get-Date
 
@@ -93,6 +130,7 @@ while ($true) {
 
     $text = "A program just opened a decoy wallet file that no honest program touches.`n`nProgram: $proc`n`n"
     if ($cut) { $text += "gotchu has blocked this program from the internet. To unblock it: gotchu tripwire --restore`n`n" }
-    $text += "If you did not do this yourself, disconnect from the internet now and run: gotchu scan"
+    $text += "If you did not do this yourself, disconnect from the internet now and run: gotchu scan`n`n"
+    $text += "If you have just installed a wallet app, it may be the app itself: run gotchu tripwire --restore, then gotchu tripwire --on to retire the decoy."
     Show-Alarm $text
 }
