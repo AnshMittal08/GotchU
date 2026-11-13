@@ -21,8 +21,9 @@ Status: early. It works on the author's Windows 11 Home PC; it has not been test
 | `gotchu scan` | Am I infected right now? Looks at running programs and what starts with Windows. |
 | `gotchu exposure` | What could a thief take from this PC today? Counts saved passwords, sessions, keys and wallets. Never shows or copies one. |
 | `gotchu harden` | Which Windows protections are off? Turns four of them on, saving the old setting so `--undo` is exact. |
-| `gotchu tripwire` | Plants decoy wallet files no honest program opens. When one is read you get an alarm, and with `--cut` that program loses its internet. It also lists any program, other than the owner, that reads your browser, Telegram or Discord logins. |
+| `gotchu tripwire` | Plants decoy wallet files no honest program opens. When one is read you get an alarm, and with `--cut` that program loses its internet. It also lists any program, other than the owner, that reads your browser, Telegram or Discord logins. Signed programs installed in Program Files, such as antivirus and backup tools, are listed rather than alarmed. |
 | `gotchu vault` | Keeps key files encrypted with a passphrase, so a stolen copy is useless. `vault use` hands a key to one command and removes it afterwards. |
+| `gotchu setup` | Installs or updates the small scripts that run with administrator rights, in `C:\Program Files\gotchu`. Done for you the first time harden or the tripwire needs them; run it yourself after updating GotchU. `--remove` takes them away again. |
 | `gotchu ui` | A local window for check, scan, exposure and harden. |
 
 ## Run it
@@ -53,7 +54,9 @@ To help, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a weakness, see [SECU
 - **Honest limits.** No tool stops every attack. The tripwire raises its alarm for decoys only; reads of real
   login stores are listed for review, not yet alarmed; a patient attacker with administrator rights can switch any tool off. The vault protects
   files at rest: a file you have taken out is an ordinary file again, and if you lose both the passphrase
-  and the recovery key, the files are gone.
+  and the recovery key, the files are gone. If GotchU itself sits in a folder your account can change (a
+  cloned copy, or Python installed just for you), a program running as you could change GotchU too;
+  `gotchu setup` tells you when that is the case.
 
 ## How it works
 
@@ -64,3 +67,7 @@ To help, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a weakness, see [SECU
 ## Where it is going
 
 See [ROADMAP.md](ROADMAP.md) and [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md): unlocking the vault with Windows Hello, watching real browser and chat stores, a recovery checklist after a theft, and an installer.
+
+## Licence
+
+Apache-2.0. See [LICENSE](LICENSE).

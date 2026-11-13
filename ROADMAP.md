@@ -80,6 +80,9 @@ point to the right tool instead of pretending.
 - [x] `tripwire`: also watches real stores that have a known owner (browser logins, sessions and
       autofill; Telegram's key file; Discord's storage). A read by any program other than the owner -
       matched by name and by code-signing publisher - is listed for review. No alarm yet, on purpose.
+- [x] `tripwire`: decoys are removed by fingerprint, never by deleting their folder, so a wallet app
+      installed into a decoy folder later keeps its data; `--on` retires such decoys. A decoy read by a
+      signed program installed in Program Files (antivirus, backup) is listed for review, not alarmed or cut.
 - [ ] `tripwire`: after a soak period, raise an alarm for real-store reads too; page in the window;
       decoys outside wallets (documents, cloud keys); opt-in online decoys; publishers for Brave,
       Vivaldi, Opera and Signal (not yet checked on a real install, so matched by name only).
@@ -98,6 +101,12 @@ point to the right tool instead of pretending.
 - [x] `harden --on/--undo`: attack-surface-reduction rules (15), Controlled Folder Access, network
       protection, cloud level. Previous setting journalled before the change; verified round trip
       on Windows 11 Home.
+- [x] Administrator helpers run only from `C:\Program Files\gotchu`, installed by first use or
+      `gotchu setup` with a SHA-256 check; elevation is refused while they differ from GotchU's own copy.
+      The harden journal lives there too.
+- [ ] Verify live on Windows 11 Home after the move to Program Files: harden on and undo (including an
+      older journal), tripwire on, alarm, restore and off, `setup` and `setup --remove`. The PowerShell
+      that gotchu builds is tested without the permission prompt; the elevated runs are not yet.
 - [ ] `harden`: guided flows with deep links for Smart App Control, memory integrity, standard
       account, backup; SmartScreen, macro blocking, autorun, PowerShell logging; third-party-antivirus case.
 - [ ] `harden`: exposure audit - private keys, recovery codes and tokens in Downloads/Desktop, saved
@@ -153,6 +162,7 @@ point to the right tool instead of pretending.
     python -m gotchu harden [--json]            # which protections are on
     python -m gotchu harden --on <lock>         # asr, folder_protection, network_protection, cloud_level
     python -m gotchu harden --undo <lock>       # put it back exactly as it was
+    python -m gotchu setup [--remove]           # install, update or remove the administrator helpers
 
 Exit code: 0 nothing found, 1 worth a look, 2 dangerous.
 Tests: `python -m unittest`

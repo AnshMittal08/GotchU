@@ -107,6 +107,10 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 - Deliberately no alarm for real stores yet. The drop rule below needs a count of honest readers
   (backup tools, antivirus, sync) first; the list is that measurement.
 - Known gap: GotchU's own `exposure` report reads these stores, so it appears in the list as python.exe.
+- Fixed 2026-11-13 after review: removing decoys deleted the whole app folder, which would have taken a
+  wallet app installed there later with it. Decoys now carry a fingerprint and only they are deleted;
+  a decoy a real app has moved in with is retired. Signed programs installed in Program Files that read
+  a decoy (antivirus, backup) are listed for review instead of alarmed and cut off.
 - Still to do: turn the list into an alarm after the soak; a page in the window; decoys that are not wallets.
 - First, test on this PC whether Windows Home records file reads (`auditpol`, event 4663). Guides say it
   does; a Microsoft forum thread reports cases where the event never appears. One permission prompt, one
