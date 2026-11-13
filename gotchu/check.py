@@ -126,7 +126,9 @@ def analyse(path):
     """Return a list of (severity, title, detail) findings for `path`."""
     findings = []
     items = members(path)
-    add = lambda sev, title, detail: findings.append((sev, title, detail))
+
+    def add(sev, title, detail):
+        findings.append((sev, title, detail))
 
     bait = bool(BAIT.search(os.path.basename(path)))
     if bait:
@@ -183,7 +185,7 @@ def analyse(path):
             "script unpacks and starts malware.")
 
     # 4. DLL sideloading: a trusted, signed program that will load an untrusted DLL beside it.
-    for folder, group in by_folder.items():
+    for group in by_folder.values():
         parsed = {}
         for m in group:
             if m.ext in {".exe", ".dll"} and m.size <= MAX_PE:

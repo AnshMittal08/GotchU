@@ -45,7 +45,9 @@ def collect():
 def analyse(snap):
     """Return (severity, title, detail) findings for a snapshot from collect()."""
     findings = []
-    add = lambda sev, title, detail: findings.append((sev, title, detail))
+
+    def add(sev, title, detail):
+        findings.append((sev, title, detail))
 
     for p in snap.get("processes", []):
         name, path, cmd = (p.get("name") or "").lower(), p.get("path") or "", p.get("cmd") or ""
