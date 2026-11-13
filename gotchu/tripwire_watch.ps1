@@ -1,6 +1,6 @@
-# gotchu tripwire watcher. Runs with administrator rights from an admin-only folder
-# (Program Files\gotchu), because only an administrator can read Windows' file-read record.
-# Kept small on purpose: it is the only gotchu code that runs elevated in the background.
+# gotchu tripwire watcher. Runs as SYSTEM from start-up, from an admin-only folder (Program Files\gotchu),
+# because only an administrator can read Windows' file-read record - and so it works for standard
+# accounts too. Kept small on purpose: it is the only gotchu code that runs elevated in the background.
 #
 # It waits for Windows to record that a program read one of the decoy files. No honest program
 # opens those, so a read means something is sweeping the PC for secrets.
@@ -19,14 +19,27 @@ function Test-Expected([string]$p) {
            ($l -like "$env:ProgramData\Microsoft\Windows Defender\Platform\*\MsMpEng.exe".ToLower())
 }
 
+# The watcher runs as SYSTEM, outside anyone's desktop, so the warning goes to the session at the screen
+# through Windows' own message service (the one msg.exe uses; it is there on Home editions too).
+try {
+    Add-Type -Namespace GotchU -Name Session -MemberDefinition @'
+[DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+public static extern bool WTSSendMessage(IntPtr server, uint session, string title, uint titleBytes,
+    string message, uint messageBytes, uint style, uint timeout, out uint response, bool wait);
+[DllImport("kernel32.dll")]
+public static extern uint WTSGetActiveConsoleSessionId();
+'@
+} catch { }
+
 function Show-Alarm([string]$text) {
-    $safe = $text.Replace("'", "''")
-    $code = "Add-Type -AssemblyName System.Windows.Forms; " +
-            "`$top = New-Object System.Windows.Forms.Form -Property @{TopMost=`$true}; " +
-            "[System.Windows.Forms.MessageBox]::Show(`$top, '$safe', 'GotchU alarm', 'OK', 'Warning') | Out-Null"
-    $b64 = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
-    Start-Process "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe" -WindowStyle Hidden `
-        -ArgumentList '-NoProfile', '-STA', '-EncodedCommand', $b64
+    if (-not ('GotchU.Session' -as [type])) { return }    # the alarm is still written to alerts.jsonl
+    $session = [GotchU.Session]::WTSGetActiveConsoleSessionId()
+    if ($session -eq [uint32]::MaxValue) { return }        # nobody is signed in at the screen
+    $title = 'GotchU alarm'
+    $response = [uint32]0
+    # 0x30 warning icon, 0x10000 brought to the front, 0x40000 kept on top; no time-out; do not wait for OK.
+    [void][GotchU.Session]::WTSSendMessage([IntPtr]::Zero, $session, $title, [uint32]($title.Length * 2),
+        $text, [uint32]($text.Length * 2), [uint32]0x50030, [uint32]0, [ref]$response, $false)
 }
 
 function Find-Store([string]$file) {

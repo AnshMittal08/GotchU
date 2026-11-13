@@ -80,12 +80,16 @@ try {
         @{ decoys = $decoys; decoy_roots = $roots; stores = $stores; cut = [bool]$Cut; audit_before = $before } |
             ConvertTo-Json -Depth 5 | Set-Content $config -Encoding utf8
 
-        $user = "$env:USERDOMAIN\$env:USERNAME"
+        # The watcher runs as SYSTEM from start-up. Reading the Security log needs administrator rights, so this is
+        # what lets it work on a standard account, whichever account approved the permission prompt.
+        # SYSTEM is named from its SID, so the name is right in every Windows language.
+        $system = (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')).Translate([System.Security.Principal.NTAccount]).Value
         $ps = "$env:windir\System32\WindowsPowerShell\v1.0\powershell.exe"
         $run = New-ScheduledTaskAction -Execute $ps -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$dest\tripwire_watch.ps1`""
-        $when = New-ScheduledTaskTrigger -AtLogOn -User $user
-        $who = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
-        $how = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+        $when = New-ScheduledTaskTrigger -AtStartup
+        $who = New-ScheduledTaskPrincipal -UserId $system -LogonType ServiceAccount -RunLevel Highest
+        $how = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) `
+            -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
         Register-ScheduledTask -TaskName $task -Action $run -Trigger $when -Principal $who -Settings $how -Force | Out-Null
         Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue   # restart so a changed setting is read
         Start-ScheduledTask -TaskName $task
