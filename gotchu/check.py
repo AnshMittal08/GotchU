@@ -8,6 +8,7 @@ import math
 import os
 import re
 import zipfile
+import zlib
 from collections import Counter, defaultdict
 
 from . import pe, report
@@ -18,6 +19,11 @@ MAX_PE = 64 * 1024 * 1024     # largest program we fully parse
 SCRIPT_EXT = {".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".hta", ".scr", ".lnk", ".pif"}
 PROGRAM_EXT = {".exe", ".dll", ".scr", ".msi", ".com"}
 DOC_EXT = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png", ".txt", ".mp4", ".mp3"}
+# Disk images: Windows opens them like a folder. They are mostly empty space by nature, so they are
+# never judged as padding or as hidden encrypted data.
+DISK_EXT = {".iso", ".img", ".vhd", ".vhdx"}
+# What a damaged or unusual archive raises when a member is read.
+READ_ERRORS = (zipfile.BadZipFile, zlib.error, EOFError, OSError, RuntimeError, NotImplementedError)
 # Formats that are legitimately high-entropy (already compressed).
 PACKED_EXT = {".zip", ".7z", ".rar", ".gz", ".xz", ".bz2", ".zst", ".cab", ".png", ".jpg", ".jpeg", ".webp",
               ".gif", ".ogg", ".opus", ".mp3", ".mp4", ".mkv", ".webm", ".avi", ".pak", ".rpa", ".rpyc", ".rpyb",
@@ -33,11 +39,13 @@ BAIT = re.compile(r"(?i)crack|keygen|activator|patch(ed)?|repack|loader|free[_ -
 class Member:
     """One file inside the thing being checked."""
 
-    def __init__(self, name, size, packed_size, reader):
+    def __init__(self, name, size, packed_size, reader, encrypted=False, damaged=False):
         self.name = name.replace("\\", "/")
         self.size = size
         self.packed_size = packed_size  # None when not inside an archive
         self._reader = reader
+        self.encrypted = encrypted      # locked with a password: only its name and size can be seen
+        self.damaged = damaged          # could not be read
 
     def read(self, n=-1):
         return self._reader(n)
@@ -65,7 +73,7 @@ def _zip_members(path):
             with z.open(zi) as f:
                 return f.read(n)
 
-        yield Member(zi.filename, zi.file_size, zi.compress_size, reader)
+        yield Member(zi.filename, zi.file_size, zi.compress_size, reader, encrypted=bool(zi.flag_bits & 0x1))
 
 
 def _dir_members(path, recursive=True):
@@ -85,15 +93,19 @@ def _dir_members(path, recursive=True):
 def members(path, recursive=True):
     if os.path.isdir(path):
         return list(_dir_members(path, recursive))
+    damaged = False
     if zipfile.is_zipfile(path):
-        return list(_zip_members(path))
+        try:
+            return list(_zip_members(path))
+        except READ_ERRORS:
+            damaged = True      # looks like a zip, but its table of contents cannot be read
     size = os.path.getsize(path)
 
     def reader(n):
         with open(path, "rb") as f:
             return f.read(n)
 
-    return [Member(os.path.basename(path), size, None, reader)]
+    return [Member(os.path.basename(path), size, None, reader, damaged=damaged)]
 
 
 def entropy(data):
@@ -124,6 +136,10 @@ def sha256(path):
     return h.hexdigest()
 
 
+def _names(items, limit=6):
+    return ", ".join(m.name for m in items[:limit]) + (" ..." if len(items) > limit else "")
+
+
 def analyse(path, recursive=True):
     """Return a list of (severity, title, detail) findings for `path` (a folder's subfolders too, if recursive)."""
     findings = []
@@ -137,6 +153,16 @@ def analyse(path, recursive=True):
         add(MEDIUM, "Name looks like pirated or 'free' software",
             "Cracks, repacks and 'free download' archives are the most common way malware is delivered.")
 
+    def read(m, n=-1):
+        """A member's bytes; nothing for one that is locked or damaged (noted, not fatal)."""
+        if m.encrypted or m.damaged:
+            return b""
+        try:
+            return m.read(n)
+        except READ_ERRORS:
+            m.damaged = True
+            return b""
+
     padding, blobs, engine = [], [], False
     by_folder = defaultdict(list)
     for m in items:
@@ -146,14 +172,20 @@ def analyse(path, recursive=True):
         if m.size > 20 * 1024 * 1024:
             if m.packed_size and m.size / max(m.packed_size, 1) > 200:
                 padding.append(m)
-            elif m.packed_size is None and entropy(m.read(SAMPLE)) < 0.5:
+            elif m.packed_size is None and m.ext not in DISK_EXT and entropy(read(m, SAMPLE)) < 0.5:
                 padding.append(m)
 
         # 2. Hidden payload: random-looking data in a file that has no reason to be random.
-        if m.size > 100 * 1024 and m.ext not in PACKED_EXT and m not in padding:
-            head = m.read(SAMPLE)
+        if m.size > 100 * 1024 and m.ext not in PACKED_EXT | DISK_EXT and m not in padding:
+            head = read(m, SAMPLE)
             if not head.startswith(PACKED_MAGIC) and entropy(head) > 7.9:
                 blobs.append(m)
+
+        if m.ext in DISK_EXT:
+            add(MEDIUM, f"Disk image: {m.name}",
+                "Windows opens it like a folder, and the files inside lose the 'downloaded from the internet' mark "
+                "that makes Windows and Office careful with them. Malware is often sent this way. gotchu cannot look "
+                "inside yet: open it only if you expected one.")
 
         # 3. Disguises.
         stem_ext = os.path.splitext(os.path.splitext(m.base)[0])[1].lower()
@@ -191,7 +223,7 @@ def analyse(path, recursive=True):
         parsed = {}
         for m in group:
             if m.ext in {".exe", ".dll"} and m.size <= MAX_PE:
-                info = pe.parse(m.read())
+                info = pe.parse(read(m))
                 if info:
                     parsed[m.base.lower()] = (m, info)
         for exe_name, (exe, info) in parsed.items():
@@ -210,6 +242,24 @@ def analyse(path, recursive=True):
                     "The program is digitally signed but will load an unsigned DLL sitting next to it, and it was "
                     f"renamed (its maker called it {info.original_name}). Malware uses this to run under a trusted "
                     "program's name (DLL sideloading).")
+
+    # 5. Contents that could not be looked at. File names inside an archive stay readable, so the checks on
+    #    names above still ran.
+    locked = [m for m in items if m.encrypted]
+    risky = [m for m in locked if m.ext in PROGRAM_EXT | SCRIPT_EXT]
+    if risky:
+        add(HIGH, "Password-protected archive with programs inside",
+            "The programs are locked with a password, so neither gotchu nor antivirus can look inside - a common "
+            "way to get malware past scanners, with the password in the message or the file name. Locked: " + _names(risky))
+    elif locked:
+        add(MEDIUM, f"Password-protected archive: {len(locked)} files could not be checked",
+            "Their contents are locked with a password. Their names were still checked. Locked: " + _names(locked))
+    damaged = [m for m in items if m.damaged]
+    if damaged:
+        add(MEDIUM, "Parts of the download could not be read",
+            "It is damaged, or packed in a way gotchu cannot read. Malware sometimes uses broken archives to confuse "
+            "scanners; a download that was cut short looks the same. Download it again from the original site. "
+            "Unreadable: " + _names(damaged))
 
     programs = [m for m in items if m.ext in PROGRAM_EXT]
     add(INFO, f"{len(items)} files, {len(programs)} programs",

@@ -19,7 +19,7 @@ from . import __version__, check, exposure, harden, scan
 
 HERE = os.path.dirname(__file__)
 WORTH_CHECKING = {".zip", ".7z", ".rar", ".iso", ".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".lnk",
-                  ".scr", ".jar", ".hta"}
+                  ".scr", ".jar", ".hta", ".img", ".vhd", ".vhdx"}
 
 
 def recent_downloads(limit=12):
