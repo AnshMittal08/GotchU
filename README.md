@@ -55,6 +55,12 @@ To help, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a weakness, see [SECU
   files at rest: a file you have taken out is an ordinary file again, and if you lose both the passphrase
   and the recovery key, the files are gone.
 
+## How it works
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the parts, what runs with which rights, and how the tripwire,
+  locks and vault work, as diagrams.
+- [docs/USER_FLOWS.md](docs/USER_FLOWS.md): who it is for and the journeys it is designed around.
+
 ## Where it is going
 
 See [ROADMAP.md](ROADMAP.md) and [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md): unlocking the vault with Windows Hello, watching real browser and chat stores, a recovery checklist after a theft, and an installer.
