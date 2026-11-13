@@ -23,6 +23,7 @@ HIDDEN_WINDOW = re.compile(r"(?i)-w(in|indowstyle)?\s+h(idden)?\b")
 DROP_FOLDER = re.compile(r"(?i)\\tmp-\d{5}-[a-z0-9]{12}\\")
 TEMP = re.compile(r"(?i)\\appdata\\local\\temp\\|\\windows\\temp\\")
 USER_WRITABLE = re.compile(r"(?i)\\appdata\\|\\users\\public\\|\\downloads\\|\\windows\\temp\\")
+STARTUP_SCRIPTS = {".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".hta", ".ps1", ".pif", ".scr"}
 
 LABELS = {
     "danger": ("SIGNS OF INFECTION", "Something on this PC behaves the way malware does. Disconnect from the "
@@ -86,6 +87,31 @@ def analyse(snap):
         if TEMP.search(value) or DROP_FOLDER.search(value):
             add(HIGH, f"Program set to start with Windows from Temp: {r.get('name')}", value[:300])
 
+    # The Start-up folder: installers put a shortcut to their program there. Malware puts itself, a script,
+    # or a shortcut to a script host there, to come back after every restart.
+    for s in snap.get("startup", []):
+        name, path = s.get("name") or "", s.get("path") or ""
+        ext = os.path.splitext(name)[1].lower()
+        target, args = s.get("target") or "", s.get("args") or ""
+        runs = os.path.basename(target).lower()
+        what = f"{target} {args}".strip()[:300]
+        if ext == ".lnk":
+            if TEMP.search(target) or DROP_FOLDER.search(target):
+                add(HIGH, f"Start-up shortcut runs a program from Temp: {name}", what)
+            elif runs in SCRIPT_HOSTS and DOWNLOAD_AND_RUN.search(args):
+                add(HIGH, f"Start-up shortcut downloads and runs code: {name}", what)
+            elif runs in SCRIPT_HOSTS or os.path.splitext(runs)[1] in STARTUP_SCRIPTS:
+                add(MEDIUM, f"Start-up shortcut runs a script: {name}",
+                    f"{what} - it runs every time you sign in. A few tools do this; malware does it to survive a restart.")
+        elif ext in STARTUP_SCRIPTS:
+            add(MEDIUM, f"Script in the Start-up folder: {name}",
+                f"{path} runs every time you sign in. If you did not put it there, do not open it: scan with your "
+                "antivirus and remove it.")
+        elif ext in {".exe", ".com", ".dll"}:
+            add(MEDIUM, f"Program placed in the Start-up folder: {name}",
+                f"{path} - installers add a shortcut here, not the program itself. If you do not recognise it, "
+                "scan with your antivirus and remove it.")
+
     proxy = snap.get("proxy") or {}
     if proxy.get("enabled") and proxy.get("server"):
         add(MEDIUM, "Web traffic is routed through a proxy",
@@ -128,6 +154,7 @@ def result():
     snap = collect()
     findings = analyse(snap) + _sideload_findings(snap)
     findings.append((INFO, f"Looked at {len(snap.get('processes', []))} running programs, "
-                           f"{len(snap.get('tasks', []))} auto-start tasks and "
-                           f"{len(snap.get('run', []))} start-up entries", "Nothing was changed on this PC."))
+                           f"{len(snap.get('tasks', []))} auto-start tasks, "
+                           f"{len(snap.get('run', []))} start-up entries and "
+                           f"{len(snap.get('startup', []))} items in the Start-up folders", "Nothing was changed on this PC."))
     return report.build("this PC", findings, LABELS)
