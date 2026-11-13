@@ -42,6 +42,11 @@ Or install it and use the short command:
     python -m pip install .
     gotchu ui
 
+With Smart App Control on (the first lock `gotchu harden` suggests), Windows may block the `gotchu` command
+that pip makes, saying "An Application Control policy has blocked this file": it is an unsigned program.
+`python -m gotchu` keeps working, because it runs through Python itself, which is signed. The planned
+signed installer removes the difference.
+
 Tests: `python -m unittest`. Every push is also linted and tested on Python 3.10 to 3.13 by GitHub Actions.
 
 To help, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a weakness, see [SECURITY.md](SECURITY.md).

@@ -44,7 +44,8 @@ LOCKS = [
      "on": lambda s: s.get("smart_app_control") == 1,
      "name": "Only trusted programs can run (Smart App Control)",
      "stops": "Stops unknown and unsigned programs from starting at all - fake installers and planted DLLs never run.",
-     "cost": "Unsigned tools, cracks and some small apps will not run, and there is no per-app exception.",
+     "cost": "Unsigned tools, cracks and some small apps will not run, and there is no per-app exception. That "
+             "includes the gotchu command pip makes: use python -m gotchu instead.",
      "alternative": "Turn it on in Windows Security > App & browser control (no reinstall needed on recent "
                     "Windows 11). If you decline: check every download with gotchu before opening it."},
     {"key": "asr", "can_apply": True,
