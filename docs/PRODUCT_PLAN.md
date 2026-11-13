@@ -96,7 +96,8 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 
 ### C. Decoys and tripwire - decoys done, real stores in observe mode
 - As built: `gotchu tripwire` plants four decoy wallet files (only for apps that are not installed). A
-  watcher in Program Files, started at sign-in with administrator rights, shows an alarm when one is read
+  watcher in Program Files (since 2026-11-13 run as SYSTEM from start-up, so it works on standard accounts;
+  at first it ran at sign-in with the user's administrator rights) shows an alarm when one is read
   and, with `--cut`, blocks that program from the internet. Owner's choice: start alert-only, then cut.
 - Verified live on Windows 11 Home with a renamed copy of curl: alarm logged, that program lost its
   internet, other programs kept theirs; `--off` removed everything it had added.

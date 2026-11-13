@@ -62,11 +62,14 @@ point to the right tool instead of pretending.
 ### Phase 1 - Core (in progress)
 - [x] `check`: pre-run inspection of zips, folders and files (padding, hidden payloads, wrapper
       engines, sideload pairs, disguised programs, shortcuts, scripts).
-- [ ] `check`: 7z/rar/ISO/MSI, Office macros, PDF actions, installers (NSIS, Inno), nested archives.
+- [x] `check`: password-protected archives (HIGH when programs are locked inside) and damaged archives are
+      reported instead of crashing; disk images (ISO, IMG, VHD) are flagged.
+- [ ] `check`: 7z/rar, contents of ISO/MSI, Office macros, PDF actions, installers (NSIS, Inno), nested archives.
 - [x] `scan`: live signs of compromise - system-process imposters, hijacked dllhost, programs running
       from Temp or drop folders, sideload pairs beside running programs, download-and-run commands,
       hidden/admin auto-start tasks, start-up entries in Temp, proxy, Defender off, forced extensions.
-- [ ] `scan`: services, WMI subscriptions, start-up folder, DNS and root certificates, browser
+- [x] `scan`: the Start-up folders (yours and all users'), with shortcuts resolved to what they run.
+- [ ] `scan`: services, WMI subscriptions, DNS and root certificates, browser
       extension permissions, large uploads by unknown programs (SRUM, needs admin).
 - [x] `ui`: local window (safety-sign design) for `check` and `scan`; token-protected, 127.0.0.1 only.
 - [x] `exposure`: what a thief could take right now - counts saved passwords, stored sessions, chat
@@ -83,14 +86,18 @@ point to the right tool instead of pretending.
 - [x] `tripwire`: decoys are removed by fingerprint, never by deleting their folder, so a wallet app
       installed into a decoy folder later keeps its data; `--on` retires such decoys. A decoy read by a
       signed program installed in Program Files (antivirus, backup) is listed for review, not alarmed or cut.
-- [ ] `tripwire`: after a soak period, raise an alarm for real-store reads too; page in the window;
+- [x] `tripwire`: watcher runs as SYSTEM from start-up, so it works on standard accounts; alarms reach the
+      screen through Windows' session message service. Read-only Tripwire page in the window.
+- [ ] `tripwire`: after a soak period, raise an alarm for real-store reads too; switching on and off in the window;
       decoys outside wallets (documents, cloud keys); opt-in online decoys; publishers for Brave,
       Vivaldi, Opera and Signal (not yet checked on a real install, so matched by name only).
 - [x] `vault`: key files encrypted with Windows' AES-256-GCM under a passphrase (scrypt), with a paper
       recovery key; file names are encrypted too. `add --move` deletes the original only after the vault
       copy is read back and matches; `use` gives a file to one command and removes it afterwards.
       Checked against the published AES-GCM test answer; wrong passphrase and tampering are rejected.
-- [ ] `vault`: unlock with Windows Hello; page in the window; change passphrase; guides for SSH keys
+- [x] `vault passphrase` and `vault recovery`: a new passphrase (opens with the recovery key too) or a new
+      recovery key, without touching the files. New vaults use scrypt N=2^17; older ones are upgraded on unlock.
+- [ ] `vault`: unlock with Windows Hello; page in the window; guides for SSH keys
       held by Windows Hello, short-lived cloud sign-in, Telegram passcode, moving browser passwords out.
 - [ ] `respond`: timeline of what ran, inventory of what was readable (sites with saved passwords and
       sessions, key files, cloud tokens), prioritised recovery checklist, evidence bundle.
@@ -104,7 +111,8 @@ point to the right tool instead of pretending.
 - [x] Administrator helpers run only from `C:\Program Files\gotchu`, installed by first use or
       `gotchu setup` with a SHA-256 check; elevation is refused while they differ from GotchU's own copy.
       The harden journal lives there too.
-- [ ] Verify live on Windows 11 Home after the move to Program Files: harden on and undo (including an
+- [ ] Verify live on Windows 11 Home, on an administrator and on a standard account, after the move to
+      Program Files and to a SYSTEM watcher: harden on and undo (including an
       older journal), tripwire on, alarm, restore and off, `setup` and `setup --remove`. The PowerShell
       that gotchu builds is tested without the permission prompt; the elevated runs are not yet.
 - [ ] `harden`: guided flows with deep links for Smart App Control, memory integrity, standard
@@ -158,6 +166,7 @@ point to the right tool instead of pretending.
     python -m gotchu vault create                # make the vault, choose a passphrase, get a recovery key
     python -m gotchu vault add [--move] <file>   # encrypt a file into it (--move deletes the original)
     python -m gotchu vault list | get <name> | remove <name>
+    python -m gotchu vault passphrase | recovery  # new passphrase (the recovery key opens it too), or new recovery key
     python -m gotchu vault use <name> -- <command with {}>   # file exists only while the command runs
     python -m gotchu harden [--json]            # which protections are on
     python -m gotchu harden --on <lock>         # asr, folder_protection, network_protection, cloud_level

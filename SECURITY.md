@@ -23,7 +23,7 @@ A detection rule that misses some malware is a normal bug, not a vulnerability: 
 ## How GotchU limits its own risk
 
 - Standard library only; no third-party packages to be poisoned.
-- The only code that runs elevated in the background is one short script, run from Program Files.
+- The only code that runs elevated in the background is one short script, run as SYSTEM from Program Files.
 - Code that runs elevated always runs from `C:\Program Files\gotchu`, never from GotchU's own folder.
   It is copied there only on first use or by `gotchu setup`, each copy checked against the SHA-256 of the
   file GotchU read, and GotchU will not ask for elevation while its own copy differs from the installed one.

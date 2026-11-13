@@ -122,4 +122,6 @@ Every change GotchU makes has a way back.
 | Turned on the tripwire | `gotchu tripwire --off` stops the watcher, puts the Windows setting back and removes the decoys (a wallet app installed since keeps its data) |
 | Got an alarm, dealt with it | `gotchu tripwire --restore` lifts the block and clears the alarm |
 | Put a file in the vault | `gotchu vault get <name>` takes it out again |
+| Forgot the vault passphrase | `gotchu vault passphrase`, opened with the recovery key |
+| Lost the paper with the recovery key | `gotchu vault recovery` makes a new one; the old one stops working |
 | Let GotchU install its administrator helpers | `gotchu setup --remove`, once the tripwire is off and no lock is waiting to be put back |

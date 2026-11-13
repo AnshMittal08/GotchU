@@ -17,14 +17,14 @@ Status: early. It works on the author's Windows 11 Home PC; it has not been test
 
 | Command | Question it answers |
 |---|---|
-| `gotchu check <file>` | Is this download safe to open? Reads it without running it and looks for the packaging tricks malware uses. |
-| `gotchu scan` | Am I infected right now? Looks at running programs and what starts with Windows. |
+| `gotchu check <file>` | Is this download safe to open? Reads it without running it and looks for the packaging tricks malware uses, including password-protected archives and disk images. |
+| `gotchu scan` | Am I infected right now? Looks at running programs and what starts with Windows, including the Start-up folder. |
 | `gotchu exposure` | What could a thief take from this PC today? Counts saved passwords, sessions, keys and wallets. Never shows or copies one. |
 | `gotchu harden` | Which Windows protections are off? Turns four of them on, saving the old setting so `--undo` is exact. |
 | `gotchu tripwire` | Plants decoy wallet files no honest program opens. When one is read you get an alarm, and with `--cut` that program loses its internet. It also lists any program, other than the owner, that reads your browser, Telegram or Discord logins. Signed programs installed in Program Files, such as antivirus and backup tools, are listed rather than alarmed. |
-| `gotchu vault` | Keeps key files encrypted with a passphrase, so a stolen copy is useless. `vault use` hands a key to one command and removes it afterwards. |
+| `gotchu vault` | Keeps key files encrypted with a passphrase, so a stolen copy is useless. `vault use` hands a key to one command and removes it afterwards. `vault passphrase` and `vault recovery` replace a forgotten passphrase or a lost recovery key. |
 | `gotchu setup` | Installs or updates the small scripts that run with administrator rights, in `C:\Program Files\gotchu`. Done for you the first time harden or the tripwire needs them; run it yourself after updating GotchU. `--remove` takes them away again. |
-| `gotchu ui` | A local window for check, scan, exposure and harden. |
+| `gotchu ui` | A local window for check, scan, exposure and harden, and the tripwire's alarms and programs to review. |
 
 ## Run it
 

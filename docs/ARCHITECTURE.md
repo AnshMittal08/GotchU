@@ -40,20 +40,21 @@ flowchart TB
 
     user --> cli
     user --> ui
-    ui --> check & scan & exposure & harden
+    ui --> check & scan & exposure & harden & tripwire
     cli --> check & scan & exposure & harden & tripwire & vault
     exposure --> map
     tripwire --> map
     harden -- "asks Windows to elevate" --> happly --> defender
     tripwire -- "asks Windows to elevate" --> tapply
     tapply --> tasks & seclog
-    tasks -- "starts at sign-in" --> watcher
+    tasks -- "starts with Windows, as SYSTEM" --> watcher
     seclog --> watcher
     watcher --> firewall
     vault --> crypto
 ```
 
-The window covers check, scan, exposure and harden. The tripwire and the vault are command line only for now.
+The window covers check, scan, exposure and harden, and shows the tripwire's alarms and review list. Switching the
+tripwire on or off, and the vault, are command line only for now.
 
 ## 2. What runs with which rights
 
@@ -69,7 +70,7 @@ flowchart LR
     subgraph admin["Administrator rights"]
         install["gotchu setup<br/>copies the helpers, once per version"]
         once["Helper scripts<br/>run once per change, after a prompt"]
-        bg["Watcher<br/>one short script, always on"]
+        bg["Watcher<br/>one short script, always on, as SYSTEM"]
         pf[("C:\Program Files\gotchu<br/>helpers, watcher, journal, settings, alarm log")]
     end
     py -- "first use, or after an update" --> install --> pf
@@ -90,8 +91,10 @@ flowchart LR
 - Anything a helper reads from your profile is checked first: the tripwire's list of files must match a
   SHA-256 passed on the command line, and a journal from an older version may only hold values Windows
   uses for that setting.
-- The watcher is PowerShell run by Windows' own `powershell.exe`. No Python and nothing from a
-  user-writable folder runs elevated in the background.
+- The watcher is PowerShell run by Windows' own `powershell.exe`, as SYSTEM from start-up: reading the
+  Security log needs administrator rights, and this way it also works when you use a standard account.
+  No Python and nothing from a user-writable folder runs elevated in the background. SYSTEM has no
+  desktop, so its warning reaches your screen through Windows' own session message service.
 - Helpers report through their exit code, and the alarm log lives in Program Files, so nothing elevated
   writes into a folder that an ordinary program could redirect.
 - Limit: if GotchU's own folder is one you can change (a cloned copy, or Python installed only for you),
@@ -124,7 +127,7 @@ sequenceDiagram
     participant P as Some program
     participant F as Watched file
     participant W as Windows Security log
-    participant T as Watcher (elevated)
+    participant T as Watcher (SYSTEM)
     participant Y as You
     P->>F: opens and reads
     F->>W: event 4663: this program read this file
