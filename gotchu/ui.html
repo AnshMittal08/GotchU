@@ -113,6 +113,7 @@
       <button data-view="scan">Scan this PC</button>
       <button data-view="exposure">What a thief could take</button>
       <button data-view="harden">Lock down this PC</button>
+      <button data-view="tripwire">Tripwire</button>
     </nav>
     <div class="later">
       <h2>Not built yet</h2>
@@ -175,6 +176,14 @@
       <button class="primary" id="harden-go" type="button">Check my protections</button>
       <p class="note" id="harden-note" aria-live="polite"></p>
       <div id="harden-out" aria-live="polite"></div>
+    </section>
+
+    <section class="view" id="view-tripwire" hidden>
+      <h1>Tripwire</h1>
+      <p class="lead">Decoy wallet files that no honest program opens. If something reads one, you see a warning window at once. Programs other than the owner that read your browser or chat logins are listed here for you to review.</p>
+      <button class="primary" id="tripwire-go" type="button">Show alarms and readers</button>
+      <p class="lead">To switch it on or off, or lift an internet block after an alarm, use the command line: <b>gotchu tripwire --on</b>, <b>--off</b> or <b>--restore</b>.</p>
+      <div id="tripwire-out" aria-live="polite"></div>
     </section>
   </main>
 </div>
@@ -330,6 +339,12 @@
   }
   $("harden-go").addEventListener("click", loadLocks);
   if (startView === "harden") { showView("harden"); loadLocks(); }
+
+  const loadTripwire = () =>
+    run($("tripwire-out"), "Reading the tripwire's alarms and the list of programs to review.",
+        () => api("/api/tripwire", {}), [$("tripwire-go")]);
+  $("tripwire-go").addEventListener("click", loadTripwire);
+  if (startView === "tripwire") { showView("tripwire"); loadTripwire(); }
 
   function showView(name) {
     document.querySelectorAll(".rail nav button").forEach((x) => x.dataset.view === name ? x.setAttribute("aria-current", "page") : x.removeAttribute("aria-current"));

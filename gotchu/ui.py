@@ -15,7 +15,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote
 
-from . import __version__, check, exposure, harden, report, scan
+from . import __version__, check, exposure, harden, report, scan, tripwire
 
 HERE = os.path.dirname(__file__)
 WORTH_CHECKING = {".zip", ".7z", ".rar", ".iso", ".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".lnk",
@@ -90,6 +90,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, scan.result())
             if self.path == "/api/exposure":
                 return self._send(200, exposure.result())
+            if self.path == "/api/tripwire":
+                return self._send(200, tripwire.result())
             if self.path == "/api/harden":
                 return self._send(200, harden.result())
             if self.path == "/api/harden/change":
