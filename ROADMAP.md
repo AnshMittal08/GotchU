@@ -123,6 +123,8 @@ point to the right tool instead of pretending.
 
 ## Quality bar for every release
 
+- [x] Continuous checks on every push and pull request: lint (ruff), tests on Python 3.10 to 3.13 on
+  Windows, PowerShell parse check, package install. Security policy and contributor guide in the repo.
 - Tests for each rule, plus a false-alarm run over a corpus of legitimate software.
 - Reproducible builds, signed releases, pinned dependencies, published SBOM.
 - Threat model and coverage map kept current; known gaps listed.

@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gotchu"
+dynamic = ["version"]
+description = "Free, local protection for Windows against password-stealing malware: it guards the safe, not just the door."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []   # standard library only, on purpose: every dependency is a supply-chain risk
+keywords = ["security", "windows", "infostealer", "malware", "hardening"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+
+[project.urls]
+Repository = "https://github.com/AnshMittal08/GotchU"
+Roadmap = "https://github.com/AnshMittal08/GotchU/blob/main/ROADMAP.md"
+
+[project.scripts]
+gotchu = "gotchu.__main__:main"
+
+[tool.setuptools]
+packages = ["gotchu"]
+
+[tool.setuptools.package-data]
+gotchu = ["*.ps1", "*.html", "*.json"]
+
+[tool.setuptools.dynamic]
+version = { attr = "gotchu.__version__" }
+
+[tool.ruff]
+target-version = "py310"
+line-length = 130
+
+[tool.ruff.lint]
+# Errors, undefined names and unused code, likely bugs, and risky calls. Style is not policed.
+select = ["E4", "E7", "E9", "F", "B", "S"]
+ignore = [
+    "S603", "S607",   # GotchU's job is to run Windows' own tools (PowerShell, netsh) with fixed arguments
+    "S608",           # the only SQL is fixed COUNT queries from the bundled secrets map
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S"]

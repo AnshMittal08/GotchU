@@ -1,5 +1,7 @@
 # GotchU
 
+[![CI](https://github.com/AnshMittal08/GotchU/actions/workflows/ci.yml/badge.svg)](https://github.com/AnshMittal08/GotchU/actions/workflows/ci.yml)
+
 Antivirus guards the door. GotchU guards the safe.
 
 Password-stealing malware does not need to break Windows. It runs once, copies your saved passwords,
@@ -34,7 +36,14 @@ Needs Windows 10 or 11 and Python 3.10 or newer. No other packages.
     python -m gotchu vault add --move my-server-key.pem
     python -m gotchu vault use my-server-key.pem -- ssh -i {} user@host
 
-Tests: `python -m unittest`
+Or install it and use the short command:
+
+    python -m pip install .
+    gotchu ui
+
+Tests: `python -m unittest`. Every push is also linted and tested on Python 3.10 to 3.13 by GitHub Actions.
+
+To help, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a weakness, see [SECURITY.md](SECURITY.md).
 
 ## Promises
 
