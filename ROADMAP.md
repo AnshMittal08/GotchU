@@ -142,6 +142,7 @@ point to the right tool instead of pretending.
 - [x] Landing page (`site/index.html`): explains the problem with a scroll-driven 3D scene (three.js), what
       GotchU does, its limits, and how to get it. Not hosted anywhere yet.
 - [ ] Desktop app with a plain report, right-click "Check with gotchu", toast alerts.
+- [x] Published on PyPI: `pip install gotchu`, or `uvx gotchu ui` without installing.
 - [ ] Single signed installer; winget and Microsoft Store listing; automatic signed updates.
 - [ ] Languages beyond English (Hindi first).
 - [ ] Guided recovery: step-by-step pages for the 50 most-used services.

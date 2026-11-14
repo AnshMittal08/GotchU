@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" width="960" height="430" role="img" aria-labelledby="t d" font-family="Bahnschrift, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="t">One wrong click, with and without GotchU</title>
+  <desc id="d">Without GotchU: you open a fake download, it copies your passwords, sends them out, and it is too late. With GotchU: you are warned before opening, the thief touches a decoy, the alarm rings and its internet is cut, and vault files it copied stay locked.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#9BA7B2"/>
+    </marker>
+  </defs>
+  <rect width="960" height="430" rx="14" fill="#11171D"/>
+
+  <!-- row 1: without -->
+  <path d="M35 40 l9 -16 l9 16 z" fill="#D2463C"/>
+  <text x="62" y="39" fill="#D2463C" font-size="17" font-weight="700" letter-spacing="1.5">WITHOUT GOTCHU</text>
+  <g font-size="16" fill="#E9EDF0">
+    <g>
+      <rect x="35" y="56" width="200" height="110" rx="8" fill="#19212A" stroke="#2B3641"/>
+      <rect x="35" y="56" width="200" height="6" rx="3" fill="#D2463C"/>
+      <text x="51" y="88" fill="#9BA7B2" font-size="13" letter-spacing="1">STEP 1</text>
+      <text x="51" y="116">You open a fake</text>
+      <text x="51" y="138">game or app</text>
+    </g>
+    <g>
+      <rect x="265" y="56" width="200" height="110" rx="8" fill="#19212A" stroke="#2B3641"/>
+      <rect x="265" y="56" width="200" height="6" rx="3" fill="#D2463C"/>
+      <text x="281" y="88" fill="#9BA7B2" font-size="13" letter-spacing="1">STEP 2</text>
+      <text x="281" y="116">It copies passwords,</text>
+      <text x="281" y="138">logins and wallets</text>
+    </g>
+    <g>
+      <rect x="495" y="56" width="200" height="110" rx="8" fill="#19212A" stroke="#2B3641"/>
+      <rect x="495" y="56" width="200" height="6" rx="3" fill="#D2463C"/>
+      <text x="511" y="88" fill="#9BA7B2" font-size="13" letter-spacing="1">STEP 3</text>
+      <text x="511" y="116">It sends them out</text>
+      <text x="511" y="138">in a few seconds</text>
+    </g>
+    <g>
+      <rect x="725" y="56" width="200" height="110" rx="8" fill="#3A1614" stroke="#D2463C"/>
+      <rect x="725" y="56" width="200" height="6" rx="3" fill="#D2463C"/>
+      <text x="741" y="88" fill="#F0A59F" font-size="13" letter-spacing="1">RESULT</text>
+      <text x="741" y="116" font-weight="700">Too late</text>
+      <text x="741" y="138">Cleaning up does</text>
+      <text x="741" y="158">not un-steal it</text>
+    </g>
+  </g>
+  <g stroke="#9BA7B2" stroke-width="2" marker-end="url(#a)">
+    <line x1="238" y1="111" x2="261" y2="111"/>
+    <line x1="468" y1="111" x2="491" y2="111"/>
+    <line x1="698" y1="111" x2="721" y2="111"/>
+  </g>
+
+  <line x1="35" y1="206" x2="925" y2="206" stroke="#2B3641" stroke-dasharray="4 6"/>
+
+  <!-- row 2: with -->
+  <rect x="36" y="235" width="16" height="16" rx="3" fill="#2C9A63"/>
+  <text x="62" y="249" fill="#2C9A63" font-size="17" font-weight="700" letter-spacing="1.5">WITH GOTCHU</text>
+  <g font-size="16" fill="#E9EDF0">
+    <g>
+      <rect x="35" y="266" width="200" height="110" rx="8" fill="#19212A" stroke="#2B3641"/>
+      <rect x="35" y="266" width="200" height="6" rx="3" fill="#2C9A63"/>
+      <text x="51" y="298" fill="#9BA7B2" font-size="13" letter-spacing="1">BEFORE</text>
+      <text x="51" y="326">You are warned</text>
+      <text x="51" y="348">before you open it</text>
+    </g>
+    <g>
+      <rect x="265" y="266" width="200" height="110" rx="8" fill="#19212A" stroke="#2B3641"/>
+      <rect x="265" y="266" width="200" height="6" rx="3" fill="#2C9A63"/>
+      <text x="281" y="298" fill="#9BA7B2" font-size="13" letter-spacing="1">IF IT RUNS ANYWAY</text>
+      <text x="281" y="326">The thief touches</text>
+      <text x="281" y="348">a decoy file</text>
+    </g>
+    <g>
+      <rect x="495" y="266" width="200" height="110" rx="8" fill="#19212A" stroke="#2B3641"/>
+      <rect x="495" y="266" width="200" height="6" rx="3" fill="#F2A900"/>
+      <text x="511" y="298" fill="#F2A900" font-size="13" letter-spacing="1">ALARM</text>
+      <text x="511" y="326">You get an alarm and</text>
+      <text x="511" y="348">its internet is cut</text>
+    </g>
+    <g>
+      <rect x="725" y="266" width="200" height="110" rx="8" fill="#12301F" stroke="#2C9A63"/>
+      <rect x="725" y="266" width="200" height="6" rx="3" fill="#2C9A63"/>
+      <text x="741" y="298" fill="#8FD3AE" font-size="13" letter-spacing="1">RESULT</text>
+      <text x="741" y="326" font-weight="700">Caught in the act</text>
+      <text x="741" y="348">Files in the vault</text>
+      <text x="741" y="368">stay locked</text>
+    </g>
+  </g>
+  <g stroke="#9BA7B2" stroke-width="2" marker-end="url(#a)">
+    <line x1="238" y1="321" x2="261" y2="321"/>
+    <line x1="468" y1="321" x2="491" y2="321"/>
+    <line x1="698" y1="321" x2="721" y2="321"/>
+  </g>
+  <text x="35" y="410" fill="#9BA7B2" font-size="13">The internet cut is the --cut option of the tripwire. No tool stops every attack.</text>
+</svg>

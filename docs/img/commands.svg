@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 350" width="960" height="350" role="img" aria-labelledby="t d" font-family="Bahnschrift, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title id="t">GotchU commands: before, during and after a bad click</title>
+  <desc id="d">Before: check, harden and exposure. During: tripwire and vault. After: scan and respond.</desc>
+  <rect width="960" height="350" rx="14" fill="#11171D"/>
+
+  <!-- before -->
+  <rect x="35" y="30" width="280" height="290" rx="8" fill="#19212A" stroke="#2B3641"/>
+  <rect x="35" y="30" width="280" height="46" rx="8" fill="#3C97D0"/>
+  <rect x="35" y="60" width="280" height="16" fill="#3C97D0"/>
+  <text x="55" y="60" fill="#0B141B" font-size="17" font-weight="700" letter-spacing="1.2">BEFORE A BAD CLICK</text>
+  <g fill="#E9EDF0">
+    <text x="55" y="112" font-size="17" font-weight="700" font-family="Consolas, 'Courier New', monospace">gotchu check</text>
+    <text x="55" y="134" font-size="14" fill="#9BA7B2">Is this download safe to open?</text>
+    <line x1="55" y1="152" x2="295" y2="152" stroke="#2B3641"/>
+    <text x="55" y="184" font-size="17" font-weight="700" font-family="Consolas, 'Courier New', monospace">gotchu harden</text>
+    <text x="55" y="206" font-size="14" fill="#9BA7B2">Turn on Windows' own locks</text>
+    <line x1="55" y1="224" x2="295" y2="224" stroke="#2B3641"/>
+    <text x="55" y="256" font-size="17" font-weight="700" font-family="Consolas, 'Courier New', monospace">gotchu exposure</text>
+    <text x="55" y="278" font-size="14" fill="#9BA7B2">What could a thief take today?</text>
+  </g>
+
+  <!-- during -->
+  <rect x="340" y="30" width="280" height="290" rx="8" fill="#19212A" stroke="#2B3641"/>
+  <rect x="340" y="30" width="280" height="46" rx="8" fill="#F2A900"/>
+  <rect x="340" y="60" width="280" height="16" fill="#F2A900"/>
+  <text x="360" y="60" fill="#0B141B" font-size="17" font-weight="700" letter-spacing="1.2">DURING A THEFT</text>
+  <g fill="#E9EDF0">
+    <text x="360" y="112" font-size="17" font-weight="700" font-family="Consolas, 'Courier New', monospace">gotchu tripwire</text>
+    <text x="360" y="134" font-size="14" fill="#9BA7B2">Decoy files that raise an alarm</text>
+    <line x1="360" y1="152" x2="600" y2="152" stroke="#2B3641"/>
+    <text x="360" y="184" font-size="17" font-weight="700" font-family="Consolas, 'Courier New', monospace">gotchu vault</text>
+    <text x="360" y="206" font-size="14" fill="#9BA7B2">Key files kept encrypted, so a</text>
+    <text x="360" y="226" font-size="14" fill="#9BA7B2">stolen copy is useless</text>
+  </g>
+
+  <!-- after -->
+  <rect x="645" y="30" width="280" height="290" rx="8" fill="#19212A" stroke="#2B3641"/>
+  <rect x="645" y="30" width="280" height="46" rx="8" fill="#2C9A63"/>
+  <rect x="645" y="60" width="280" height="16" fill="#2C9A63"/>
+  <text x="665" y="60" fill="#0B141B" font-size="17" font-weight="700" letter-spacing="1.2">AFTER A BAD CLICK</text>
+  <g fill="#E9EDF0">
+    <text x="665" y="112" font-size="17" font-weight="700" font-family="Consolas, 'Courier New', monospace">gotchu scan</text>
+    <text x="665" y="134" font-size="14" fill="#9BA7B2">Am I infected right now?</text>
+    <line x1="665" y1="152" x2="905" y2="152" stroke="#2B3641"/>
+    <text x="665" y="184" font-size="17" font-weight="700" font-family="Consolas, 'Courier New', monospace">gotchu respond</text>
+    <text x="665" y="206" font-size="14" fill="#9BA7B2">What to do now, in order</text>
+  </g>
+</svg>
