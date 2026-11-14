@@ -1,6 +1,12 @@
 """Shared result shape for every command: a verdict plus findings, as data or as text."""
 import json
+import os
 import subprocess
+
+# Always Windows' own PowerShell, by its full path. Asked for by name alone, Windows looks in the current
+# folder first, so a file called powershell.exe inside a download would be run instead.
+POWERSHELL = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "WindowsPowerShell", "v1.0",
+                          "powershell.exe")
 
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
 _ORDER = {HIGH: 0, MEDIUM: 1, INFO: 2}
@@ -13,7 +19,7 @@ class CouldNotRun(Exception):
 def powershell_json(script, what, timeout=180):
     """Run one of gotchu's read-only PowerShell collectors and return what it printed, as data."""
     try:
-        out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+        out = subprocess.run([POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                               "-File", script], capture_output=True, timeout=timeout)
         return json.loads(out.stdout.decode("utf-8", "replace"))
     except (OSError, subprocess.TimeoutExpired, ValueError):

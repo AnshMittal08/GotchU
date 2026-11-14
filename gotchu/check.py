@@ -81,6 +81,15 @@ def _zip_members(path):
         yield Member(zi.filename, zi.file_size, zi.compress_size, reader, encrypted=bool(zi.flag_bits & 0x1))
 
 
+def long_path(path):
+    """The same path in the form Windows accepts past 260 characters, so a file in a very deep folder is
+    looked at instead of silently skipped."""
+    if os.name != "nt" or not path or path.startswith("\\\\?\\"):
+        return path
+    full = os.path.abspath(path)
+    return "\\\\?\\UNC\\" + full[2:] if full.startswith("\\\\") else "\\\\?\\" + full
+
+
 def _dir_members(path, recursive=True):
     for root, dirs, files in os.walk(path):
         if not recursive:
@@ -92,7 +101,10 @@ def _dir_members(path, recursive=True):
                 with open(full, "rb") as f:
                     return f.read(n)
 
-            yield Member(os.path.relpath(full, path), os.path.getsize(full), None, reader)
+            try:
+                yield Member(os.path.relpath(full, path), os.path.getsize(full), None, reader)
+            except OSError:     # Windows would not show this one file: say so, and still check the rest
+                yield Member(os.path.relpath(full, path), 0, None, reader, damaged=True)
 
 
 def members(path, recursive=True):
@@ -148,6 +160,7 @@ def _names(items, limit=6):
 def analyse(path, recursive=True):
     """Return a list of (severity, title, detail) findings for `path` (a folder's subfolders too, if recursive)."""
     findings = []
+    path = long_path(path)
     items = members(path, recursive)
 
     def add(sev, title, detail):
@@ -295,8 +308,9 @@ def verdict(findings):
 
 def result(path):
     extra = {}
-    if os.path.isfile(path):
-        extra = {"sha256": sha256(path), "origin": download_origin(path)}
+    real = long_path(path)
+    if os.path.isfile(real):
+        extra = {"sha256": sha256(real), "origin": download_origin(real)}
     findings = analyse(path)
     labels = LABELS
     worries = [title for sev, title, _ in findings if sev != INFO]

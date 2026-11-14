@@ -23,6 +23,7 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/AnshMittal08/GotchU"
 Roadmap = "https://github.com/AnshMittal08/GotchU/blob/main/ROADMAP.md"
+Changelog = "https://github.com/AnshMittal08/GotchU/blob/main/CHANGELOG.md"
 
 [project.scripts]
 gotchu = "gotchu.__main__:main"

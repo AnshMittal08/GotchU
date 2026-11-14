@@ -50,5 +50,14 @@ class CliTests(unittest.TestCase):
         self.assertIn("does not exist", out)
 
 
+    def test_powershell_is_started_by_its_full_path(self):
+        # By name alone, Windows would run a powershell.exe sitting in the current folder (a download, say).
+        self.assertTrue(os.path.isabs(report.POWERSHELL) and os.path.isfile(report.POWERSHELL))
+        silent = subprocess.CompletedProcess([], 1, stdout=b"", stderr=b"")
+        with mock.patch.object(report.subprocess, "run", return_value=silent) as started:
+            run(["scan"])
+        self.assertEqual(started.call_args.args[0][0], report.POWERSHELL)
+
+
 if __name__ == "__main__":
     unittest.main()

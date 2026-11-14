@@ -35,11 +35,30 @@ function Show-Alarm([string]$text) {
     if (-not ('GotchU.Session' -as [type])) { return }    # the alarm is still written to alerts.jsonl
     $session = [GotchU.Session]::WTSGetActiveConsoleSessionId()
     if ($session -eq [uint32]::MaxValue) { return }        # nobody is signed in at the screen
-    $title = 'GotchU alarm'
+    $title = 'GotchU: a decoy file was opened'
     $response = [uint32]0
     # 0x30 warning icon, 0x10000 brought to the front, 0x40000 kept on top; no time-out; do not wait for OK.
     [void][GotchU.Session]::WTSSendMessage([IntPtr]::Zero, $session, $title, [uint32]($title.Length * 2),
         $text, [uint32]($text.Length * 2), [uint32]0x50030, [uint32]0, [ref]$response, $false)
+}
+
+# The words of the alarm: what happened, what gotchu did, what to do next, and the way out if it is a
+# false alarm. Calm and exact - it is read by someone who may be frightened.
+function Get-AlarmText([string]$proc, [bool]$cut) {
+    $name = if ($proc) { [System.IO.Path]::GetFileName($proc) } else { 'A program' }
+    $text = "$name opened a decoy file that GotchU planted. Ordinary programs have no reason to open it, " +
+            "so this may be malware looking for passwords or wallets.`n`n"
+    if ($proc) { $text += "Program: $proc`n" }
+    $text += "Time: $((Get-Date).ToString('HH:mm'))`n`n"
+    $text += if ($cut) { "What GotchU did: blocked this program from the internet, and recorded the alarm.`n`n" }
+             else { "What GotchU did: recorded the alarm. Nothing was blocked.`n`n" }
+    $text += "If you do not recognise this program:`n" +
+             "1. Disconnect from the internet.`n" +
+             "2. Run: gotchu scan`n" +
+             "3. Run: gotchu respond (it lists what to do, in order)`n`n" +
+             "If you do recognise it, for example a wallet app or browser you have just installed, this is " +
+             "probably a false alarm. Run: gotchu tripwire --restore, then: gotchu tripwire --on"
+    return $text
 }
 
 function Find-Store([string]$file) {
@@ -160,10 +179,6 @@ while ($true) {
     @{ time = (Get-Date).ToString('s'); program = $proc; file = $file; cut = $cut } |
         ConvertTo-Json -Compress | Add-Content -Path $log -Encoding utf8
 
-    $text = "A program just opened a decoy file that no honest program touches.`n`nProgram: $proc`n`n"
-    if ($cut) { $text += "gotchu has blocked this program from the internet. To unblock it: gotchu tripwire --restore`n`n" }
-    $text += "If you did not do this yourself, disconnect from the internet now and run: gotchu scan`n`n"
-    $text += "If you have just installed a wallet app or a new browser, it may be the app itself: run gotchu tripwire --restore, then gotchu tripwire --on to retire the decoy."
-    Show-Alarm $text
+    Show-Alarm (Get-AlarmText $proc $cut)
   } catch { }
 }

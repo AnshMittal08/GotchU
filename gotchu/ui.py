@@ -36,7 +36,7 @@ def recent_downloads(limit=12):
 
 
 def browse(folder):
-    cmd = ["powershell.exe", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File",
+    cmd = [report.POWERSHELL, "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File",
            os.path.join(HERE, "browse.ps1")] + (["-Folder"] if folder else [])
     out = subprocess.run(cmd, capture_output=True, timeout=600)
     return out.stdout.decode("utf-8", "replace").strip()
@@ -82,8 +82,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": "The request could not be read."})
         try:
             if self.path == "/api/check":
-                path = (body.get("path") or "").strip().strip('"')
-                if not path or not os.path.exists(path):
+                path = body.get("path") if isinstance(body, dict) else None
+                path = path.strip().strip('"') if isinstance(path, str) else ""
+                if not path or not os.path.exists(check.long_path(path)):
                     return self._send(400, {"error": "That file or folder does not exist. Check the path and try again."})
                 return self._send(200, check.result(path))
             if self.path == "/api/scan":
@@ -94,10 +95,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, tripwire.result())
             if self.path == "/api/harden":
                 return self._send(200, harden.result())
-            if self.path == "/api/harden/change":
+            if self.path == "/api/harden/change" and isinstance(body, dict):
                 ok, message = harden.change(str(body.get("key")), undo=bool(body.get("undo")))
                 return self._send(200, {"ok": ok, "message": message, "result": harden.result()})
-            if self.path == "/api/browse":
+            if self.path == "/api/browse" and isinstance(body, dict):
                 return self._send(200, {"path": browse(bool(body.get("folder")))})
         except PermissionError:
             return self._send(400, {"error": "Windows would not let gotchu read that. Try a copy in your Downloads folder."})

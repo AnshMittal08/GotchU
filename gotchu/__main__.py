@@ -111,8 +111,20 @@ def _setup(args):
     return 0 if ok else 1
 
 
+class _Parser(argparse.ArgumentParser):
+    """A mistyped command ends with code 3 (could not run). argparse's own 2 would read as 'dangerous'."""
+
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(3, f"{self.prog}: error: {message}\n")
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="gotchu", description="Free, local, read-only PC safety checks.")
+    # A name in a script the console cannot show (Hindi in a redirected file, say) prints as "?", not a crash.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+    parser = _Parser(prog="gotchu", description="Free, local, read-only PC safety checks.")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("check", help="inspect a download (zip, folder or file) without running it")
@@ -194,8 +206,11 @@ def _run(args):
         return 0 if ok else 1
 
     if args.command == "check":
-        if not os.path.exists(args.path):
-            raise report.CouldNotRun(f"{args.path} does not exist. Check the path and try again.")
+        if not args.path.strip():
+            raise report.CouldNotRun("Give the file or folder to check, for example: gotchu check Downloads\\game.zip")
+        if not os.path.exists(check.long_path(args.path)):
+            raise report.CouldNotRun(f"{args.path} does not exist, or Windows will not let gotchu see it. "
+                                     "Check the path and try again.")
         try:
             result = check.result(args.path)
         except OSError as e:

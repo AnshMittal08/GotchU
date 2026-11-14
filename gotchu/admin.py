@@ -15,6 +15,8 @@ import os
 import subprocess
 import tempfile
 
+from .report import POWERSHELL
+
 HERE = os.path.dirname(__file__)
 INSTALLED = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "gotchu")
 HELPERS = ("harden_apply.ps1", "tripwire_apply.ps1", "tripwire_watch.ps1")
@@ -64,13 +66,13 @@ def launcher(args, elevate=True):
     waits for it, and exits with its exit code (CANCELLED if the prompt was declined)."""
     verb = "-Verb RunAs " if elevate else ""
     listed = ",".join(_quote(a) for a in args)
-    return (f"try {{ $p = Start-Process powershell.exe {verb}-Wait -PassThru -WindowStyle Hidden -ArgumentList {listed} }} "
+    return (f"try {{ $p = Start-Process {_quote(POWERSHELL)} {verb}-Wait -PassThru -WindowStyle Hidden -ArgumentList {listed} }} "
             f"catch {{ exit {CANCELLED} }}; if ($null -eq $p.ExitCode) {{ exit 1 }}; exit $p.ExitCode")
 
 
 def _elevate(args):
     try:
-        out = subprocess.run(["powershell.exe", "-NoProfile", "-Command", launcher(args)], capture_output=True, timeout=300)
+        out = subprocess.run([POWERSHELL, "-NoProfile", "-Command", launcher(args)], capture_output=True, timeout=300)
     except subprocess.TimeoutExpired:
         return UNANSWERED
     return out.returncode

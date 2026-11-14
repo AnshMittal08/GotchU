@@ -81,6 +81,7 @@ Every command in detail: [docs/COMMANDS.md](https://github.com/AnshMittal08/Gotc
   is designed around.
 - [Where it is going](https://github.com/AnshMittal08/GotchU/blob/main/ROADMAP.md): unlocking the vault
   with Windows Hello, an alarm for reads of real browser and chat stores, and a signed installer.
+- [What changed](https://github.com/AnshMittal08/GotchU/blob/main/CHANGELOG.md) in each release.
 - [Landing page](https://github.com/AnshMittal08/GotchU/blob/main/site/index.html): one file; download
   it and open it in a browser. Scrolling plays a theft twice in 3D, once unguarded and once with GotchU.
 
