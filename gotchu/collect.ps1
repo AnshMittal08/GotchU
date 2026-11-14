@@ -43,6 +43,17 @@ $o.startup = @(foreach ($dir in [Environment]::GetFolderPath('Startup'), [Enviro
     }
 })
 
+# Windows services: they start with Windows and run with full rights.
+$o.services = @(Get-CimInstance Win32_Service | ForEach-Object {
+    @{ name = $_.Name; title = "$($_.DisplayName)"; path = "$($_.PathName)"; start = "$($_.StartMode)" }
+})
+
+# The hosts file can send a website's name to another address. Comments are dropped.
+$hosts = "$env:windir\System32\drivers\etc\hosts"
+$o.hosts = @(if (Test-Path -LiteralPath $hosts) {
+    Get-Content -LiteralPath $hosts | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ }
+})
+
 $i = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 $o.proxy = @{ enabled = [bool]$i.ProxyEnable; server = "$($i.ProxyServer)"; pac = "$($i.AutoConfigURL)" }
 

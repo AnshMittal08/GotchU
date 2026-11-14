@@ -64,13 +64,18 @@ point to the right tool instead of pretending.
       engines, sideload pairs, disguised programs, shortcuts, scripts).
 - [x] `check`: password-protected archives (HIGH when programs are locked inside) and damaged archives are
       reported instead of crashing; disk images (ISO, IMG, VHD) are flagged.
-- [ ] `check`: 7z/rar, contents of ISO/MSI, Office macros, PDF actions, installers (NSIS, Inno), nested archives.
+- [x] `check`: an archive it cannot open (7z, RAR, cab, tar and so on, or an archive inside the download) is
+      reported as "could not look inside", never as clean.
+- [ ] `check`: opening 7z/rar, contents of ISO/MSI, Office macros, PDF actions, installers (NSIS, Inno), nested archives.
 - [x] `scan`: live signs of compromise - system-process imposters, hijacked dllhost, programs running
       from Temp or drop folders, sideload pairs beside running programs, download-and-run commands,
       hidden/admin auto-start tasks, start-up entries in Temp, proxy, Defender off, forced extensions.
 - [x] `scan`: the Start-up folders (yours and all users'), with shortcuts resolved to what they run.
-- [ ] `scan`: services, WMI subscriptions, DNS and root certificates, browser
+- [x] `scan`: Windows services running from folders any program can write to; hosts-file redirects (HIGH when
+      security or update sites are cut off); browser extensions loaded from a folder instead of the store.
+- [ ] `scan`: WMI subscriptions, DNS and root certificates, browser
       extension permissions, large uploads by unknown programs (SRUM, needs admin).
+- [x] A Windows permission prompt left unanswered is explained instead of ending in a Python error.
 - [x] `ui`: local window (safety-sign design) for `check` and `scan`; token-protected, 127.0.0.1 only.
 - [x] `exposure`: what a thief could take right now - counts saved passwords, stored sessions, chat
       sessions, cloud logins, key files and wallets from `secrets_map.json`, and tries to open each
@@ -88,7 +93,13 @@ point to the right tool instead of pretending.
       signed program installed in Program Files (antivirus, backup) is listed for review, not alarmed or cut.
 - [x] `tripwire`: watcher runs as SYSTEM from start-up, so it works on standard accounts; alarms reach the
       screen through Windows' session message service. Read-only Tripwire page in the window.
-- [ ] `tripwire`: after a soak period, raise an alarm for real-store reads too; switching on and off in the window;
+- [x] `tripwire`: decoy browser logins for browsers that are not installed (Brave, Vivaldi), so a thief that
+      skips wallets still trips it. The watcher marks a heartbeat file and `gotchu tripwire` says when it has
+      stopped; one bad event no longer stops the watcher. Reads of real stores are grouped per program, and
+      weighed: a known browser importing another's data is information, an unsigned program is HIGH.
+      First soak (one PC, one day): the only other reader of the browser stores was Edge reading Chrome's.
+- [ ] `tripwire`: a pop-up alarm for real-store reads (needs more soak data, and a way not to alarm on
+      `gotchu exposure` itself, which reads those stores); switching on and off in the window;
       decoys outside wallets (documents, cloud keys); opt-in online decoys; publishers for Brave,
       Vivaldi, Opera and Signal (not yet checked on a real install, so matched by name only).
 - [x] `vault`: key files encrypted with Windows' AES-256-GCM under a passphrase (scrypt), with a paper
@@ -97,10 +108,14 @@ point to the right tool instead of pretending.
       Checked against the published AES-GCM test answer; wrong passphrase and tampering are rejected.
 - [x] `vault passphrase` and `vault recovery`: a new passphrase (opens with the recovery key too) or a new
       recovery key, without touching the files. New vaults use scrypt N=2^17; older ones are upgraded on unlock.
+- [x] `vault backup` and `vault restore`: copy the vault, still encrypted, to another drive and back. Restore
+      refuses to replace a vault that exists.
 - [ ] `vault`: unlock with Windows Hello; page in the window; guides for SSH keys
       held by Windows Hello, short-lived cloud sign-in, Telegram passcode, moving browser passwords out.
-- [ ] `respond`: timeline of what ran, inventory of what was readable (sites with saved passwords and
-      sessions, key files, cloud tokens), prioritised recovery checklist, evidence bundle.
+- [x] `respond`: a recovery checklist built from the exposure report, in priority order (money that cannot be
+      called back first, then email, sessions, passwords, chat apps, cloud keys, key files, cleaning the PC).
+      `--sites` lists the websites with a saved password, names only.
+- [ ] `respond`: timeline of what ran, evidence bundle, per-service steps, a page in the window.
 - Verify: rebuilt real-world cases are flagged; a corpus of legitimate software passes clean.
 
 ### Phase 2 - Harden and watch (harden is the core of the product; see docs/HARDEN_PLAN.md)

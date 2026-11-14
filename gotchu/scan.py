@@ -3,10 +3,11 @@
 `collect()` takes a snapshot of the PC; `analyse()` is pure and judges a snapshot,
 so the rules can be tested with made-up snapshots.
 """
+import json
 import os
 import re
 
-from . import check, report
+from . import check, exposure, report
 from .report import HIGH, INFO, MEDIUM
 
 # Windows programs that always live in System32 / SysWOW64 (explorer.exe: C:\Windows).
@@ -23,6 +24,12 @@ HIDDEN_WINDOW = re.compile(r"(?i)-w(in|indowstyle)?\s+h(idden)?\b")
 DROP_FOLDER = re.compile(r"(?i)\\tmp-\d{5}-[a-z0-9]{12}\\")
 TEMP = re.compile(r"(?i)\\appdata\\local\\temp\\|\\windows\\temp\\")
 USER_WRITABLE = re.compile(r"(?i)\\appdata\\|\\users\\public\\|\\downloads\\|\\windows\\temp\\")
+# Names that Windows and Docker put in the hosts file themselves.
+OWN_HOSTS = re.compile(r"(?i)^(localhost|.*\.docker\.internal|.*\.localhost)$")
+SECURITY_SITES = re.compile(r"(?i)microsoft|windowsupdate|defender|virustotal|kaspersky|avast|avg\.|bitdefender|malwarebytes|"
+                            r"eset\.|norton|mcafee|sophos|trendmicro")
+# How Chrome and its relatives record where an extension came from: 4 is a folder on this PC, 8 the command line.
+LOADED_FROM_FOLDER = {4, 8}
 STARTUP_SCRIPTS = {".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".hta", ".ps1", ".pif", ".scr"}
 
 LABELS = {
@@ -112,6 +119,29 @@ def analyse(snap):
                 f"{path} - installers add a shortcut here, not the program itself. If you do not recognise it, "
                 "scan with your antivirus and remove it.")
 
+    for s in snap.get("services", []):
+        path = s.get("path") or ""
+        if s.get("start") == "Disabled" or not (USER_WRITABLE.search(path) or DROP_FOLDER.search(path)):
+            continue
+        sev = HIGH if TEMP.search(path) or DROP_FOLDER.search(path) else MEDIUM
+        add(sev, f"Windows service runs from a folder any program can write to: {s.get('title') or s.get('name')}",
+            f"{path[:300]} - a service starts with Windows and runs with full rights. Real ones live in Program Files "
+            "or the Windows folder; malware installs one to come back after every restart.")
+
+    redirected = []
+    for line in snap.get("hosts", []):
+        address, *names = line.split()
+        redirected += [(n, address) for n in names if not OWN_HOSTS.match(n)]
+    blocked = [n for n, _ in redirected if SECURITY_SITES.search(n)]
+    if blocked:
+        add(HIGH, f"The hosts file cuts this PC off from {len(blocked)} security or update sites",
+            "Malware does this so antivirus and Windows cannot update: " + ", ".join(blocked[:8])
+            + ". Open C:\\Windows\\System32\\drivers\\etc\\hosts in Notepad as administrator and remove those lines.")
+    elif redirected:
+        add(MEDIUM, f"The hosts file sends {len(redirected)} website names somewhere else",
+            "Fine if you, an ad blocker or a work tool added them; otherwise a site you type can lead to a fake copy: "
+            + ", ".join(f"{n} -> {a}" for n, a in redirected[:6]) + (" ..." if len(redirected) > 6 else ""))
+
     proxy = snap.get("proxy") or {}
     if proxy.get("enabled") and proxy.get("server"):
         add(MEDIUM, "Web traffic is routed through a proxy",
@@ -150,11 +180,41 @@ def _sideload_findings(snap):
     return [(s, f"Running now: {t}", d) for s, t, d in findings]
 
 
+def extension_findings(env=None, secrets=None):
+    """Browser extensions loaded from a folder on this PC instead of the browser's store."""
+    env = os.environ if env is None else env
+    secrets = secrets or exposure.load_map()
+    findings = []
+    for b in secrets["browsers"]:
+        root = exposure.expand(b["root"], env)
+        if b["engine"] != "chromium" or not os.path.isdir(root):
+            continue
+        for profile in [root] + [p.path for p in os.scandir(root) if p.is_dir()]:
+            seen = set()
+            for name in ("Secure Preferences", "Preferences"):
+                try:
+                    with open(os.path.join(profile, name), encoding="utf-8") as f:
+                        settings = json.load(f).get("extensions", {}).get("settings", {})
+                except (OSError, ValueError, AttributeError):
+                    continue
+                for ext_id, ext in settings.items():
+                    if not isinstance(ext, dict) or ext.get("location") not in LOADED_FROM_FOLDER or ext_id in seen:
+                        continue
+                    seen.add(ext_id)
+                    label = (ext.get("manifest") or {}).get("name") or ext_id
+                    findings.append((MEDIUM, f"Extension loaded from a folder, not the store: {label} in {b['name']}",
+                                     f"{ext.get('path') or ext_id} - developers do this on purpose. If you did not, remove it "
+                                     "on the browser's extensions page: malware adds extensions this way to read the pages "
+                                     "you visit and the logins you type."))
+    return findings
+
+
 def result():
     snap = collect()
-    findings = analyse(snap) + _sideload_findings(snap)
+    findings = analyse(snap) + _sideload_findings(snap) + extension_findings()
     findings.append((INFO, f"Looked at {len(snap.get('processes', []))} running programs, "
                            f"{len(snap.get('tasks', []))} auto-start tasks, "
+                           f"{len(snap.get('services', []))} services, "
                            f"{len(snap.get('run', []))} start-up entries and "
                            f"{len(snap.get('startup', []))} items in the Start-up folders", "Nothing was changed on this PC."))
     return report.build("this PC", findings, LABELS)

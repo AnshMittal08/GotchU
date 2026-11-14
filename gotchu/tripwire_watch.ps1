@@ -50,6 +50,16 @@ function Find-Store([string]$file) {
     }
 }
 
+# Other browsers, which read each other's logins when they offer to import them: known by name, by who
+# signed them, and by being installed in Program Files.
+function Test-Reader([string]$proc) {
+    $name = [System.IO.Path]::GetFileName($proc)
+    foreach ($r in @($cfg.readers)) {
+        if ($r.name -ieq $name -and (Get-Signer $proc) -like "*O=$($r.signer),*" -and (Test-Installed $proc)) { return $true }
+    }
+    return $false
+}
+
 # Who signed a program, if the signature is valid; '' otherwise. Remembered per program.
 $signers = @{}
 function Get-Signer([string]$proc) {
@@ -98,9 +108,17 @@ Register-ObjectEvent -InputObject $watcher -EventName EventRecordWritten -Source
 $watcher.Enabled = $true
 
 $seen = @{}
+$beat = Join-Path $PSScriptRoot 'heartbeat'    # marked every 30 seconds, so gotchu can tell the watcher is alive
+$lastBeat = [datetime]::MinValue
 while ($true) {
-    $e = Wait-Event -SourceIdentifier gotchu
-    Remove-Event -EventIdentifier $e.EventIdentifier
+  if (((Get-Date) - $lastBeat).TotalSeconds -ge 30) {
+      Set-Content -LiteralPath $beat -Value (Get-Date).ToString('s') -Encoding ascii -ErrorAction SilentlyContinue
+      $lastBeat = Get-Date
+  }
+  $e = Wait-Event -SourceIdentifier gotchu -Timeout 30
+  if (-not $e) { continue }
+  Remove-Event -EventIdentifier $e.EventIdentifier
+  try {     # one event that cannot be handled must not stop the watching
     $rec = $e.SourceEventArgs.EventRecord
     if (-not $rec) { continue }
     $data = @{}
@@ -116,7 +134,8 @@ while ($true) {
         $key = "$proc|$($store.path)"
         if ($seen[$key] -and ((Get-Date) - $seen[$key]).TotalMinutes -lt 60) { continue }
         $seen[$key] = Get-Date
-        @{ time = (Get-Date).ToString('s'); program = $proc; store = $store.name; file = $file } |
+        @{ time = (Get-Date).ToString('s'); program = $proc; store = $store.name; file = $file
+           signed = [bool](Get-Signer $proc); known = (Test-Reader $proc) } |
             ConvertTo-Json -Compress | Add-Content -Path (Join-Path $PSScriptRoot 'sightings.jsonl') -Encoding utf8
         continue
     }
@@ -125,7 +144,7 @@ while ($true) {
         $key = "$proc|$file"
         if ($seen[$key] -and ((Get-Date) - $seen[$key]).TotalMinutes -lt 60) { continue }
         $seen[$key] = Get-Date
-        @{ time = (Get-Date).ToString('s'); program = $proc; store = 'a decoy wallet file'; file = $file; kind = 'decoy'; reason = $reason } |
+        @{ time = (Get-Date).ToString('s'); program = $proc; store = 'a decoy file'; file = $file; kind = 'decoy'; reason = $reason } |
             ConvertTo-Json -Compress | Add-Content -Path (Join-Path $PSScriptRoot 'sightings.jsonl') -Encoding utf8
         continue
     }
@@ -141,9 +160,10 @@ while ($true) {
     @{ time = (Get-Date).ToString('s'); program = $proc; file = $file; cut = $cut } |
         ConvertTo-Json -Compress | Add-Content -Path $log -Encoding utf8
 
-    $text = "A program just opened a decoy wallet file that no honest program touches.`n`nProgram: $proc`n`n"
+    $text = "A program just opened a decoy file that no honest program touches.`n`nProgram: $proc`n`n"
     if ($cut) { $text += "gotchu has blocked this program from the internet. To unblock it: gotchu tripwire --restore`n`n" }
     $text += "If you did not do this yourself, disconnect from the internet now and run: gotchu scan`n`n"
-    $text += "If you have just installed a wallet app, it may be the app itself: run gotchu tripwire --restore, then gotchu tripwire --on to retire the decoy."
+    $text += "If you have just installed a wallet app or a new browser, it may be the app itself: run gotchu tripwire --restore, then gotchu tripwire --on to retire the decoy."
     Show-Alarm $text
+  } catch { }
 }

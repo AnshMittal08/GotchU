@@ -19,7 +19,10 @@ HERE = os.path.dirname(__file__)
 INSTALLED = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "gotchu")
 HELPERS = ("harden_apply.ps1", "tripwire_apply.ps1", "tripwire_watch.ps1")
 CANCELLED = 1223    # Windows' code for "the user said no"
+UNANSWERED = -1     # ours: the prompt sat unanswered until gotchu stopped waiting
 DECLINED = "Nothing was changed: the Windows permission prompt was declined or closed."
+NO_ANSWER = ("Nothing was changed: the Windows permission prompt was not answered within five minutes. It may be "
+             "behind another window or flashing on the taskbar. If it is still on screen, choose No, then try again.")
 
 
 def _sha256(path):
@@ -66,8 +69,16 @@ def launcher(args, elevate=True):
 
 
 def _elevate(args):
-    out = subprocess.run(["powershell.exe", "-NoProfile", "-Command", launcher(args)], capture_output=True, timeout=300)
+    try:
+        out = subprocess.run(["powershell.exe", "-NoProfile", "-Command", launcher(args)], capture_output=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        return UNANSWERED
     return out.returncode
+
+
+def _refused(code):
+    """The message for a prompt that was declined or left unanswered; None for any other exit code."""
+    return {CANCELLED: DECLINED, UNANSWERED: NO_ANSWER}.get(code)
 
 
 def install_script(hashes, source=HERE, dest=INSTALLED):
@@ -88,8 +99,8 @@ def install(source=HERE, dest=INSTALLED):
     hashes = {name: _sha256(os.path.join(source, name)) for name in HELPERS}
     script = install_script(hashes, source, dest)
     code = _elevate(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", f'"{script}"'])
-    if code == CANCELLED:
-        return False, DECLINED
+    if _refused(code):
+        return False, _refused(code)
     if code == 2:
         return False, ("A helper file changed while it was being installed, so it was removed again. "
                        "Run gotchu scan, then try again.")
@@ -111,8 +122,8 @@ def remove(dest=INSTALLED):
         return True, "GotchU's administrator helpers are not installed."
     code = _elevate(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
                      f'"Remove-Item -LiteralPath {_quote(dest)} -Recurse -Force"'])
-    if code == CANCELLED:
-        return False, DECLINED
+    if _refused(code):
+        return False, _refused(code)
     if os.path.isdir(dest):
         return False, f"Windows could not remove {dest}."
     return True, f"Removed {dest}."
@@ -134,8 +145,8 @@ def run(script, args):
             return False, message
     code = _elevate(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", f'"{os.path.join(INSTALLED, script)}"']
                     + list(args))
-    if code == CANCELLED:
-        return False, DECLINED
+    if _refused(code):
+        return False, _refused(code)
     if code:
         try:
             with open(os.path.join(INSTALLED, "last-error.txt"), encoding="utf-8-sig") as f:

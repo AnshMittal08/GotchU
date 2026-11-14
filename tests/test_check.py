@@ -93,6 +93,15 @@ class CheckTests(unittest.TestCase):
         self.assertEqual([m.name for m in check.members(folder, recursive=False)], ["app.exe"])
         self.assertEqual(len(check.members(folder)), 2)
 
+    def test_an_archive_that_cannot_be_opened_is_never_called_clean(self):
+        path = os.path.join(self.tmp.name, "photos.7z")
+        with open(path, "wb") as f:
+            f.write(b"7z\xbc\xaf\x27\x1c" + b"\0" * 64)
+        result = check.result(path)
+        self.assertEqual((result["level"], result["verdict"]), ("warn", "COULD NOT LOOK INSIDE"))
+        nested = make_zip(self.tmp.name, "bundle.zip", {"readme.txt": b"hello", "inner.rar": b"Rar!" + b"\0" * 64})
+        self.assertIn(("MEDIUM", "Archive gotchu cannot look inside: inner.rar"), self.titles(nested))
+
     def test_ordinary_zip_passes(self):
         path = make_zip(self.tmp.name, "notes.zip", {
             "readme.txt": b"hello " * 1000,

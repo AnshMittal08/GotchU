@@ -50,6 +50,12 @@ class RunTests(unittest.TestCase):
                 mock.patch.object(admin, "_elevate", return_value=admin.CANCELLED):
             self.assertEqual(admin.run("harden_apply.ps1", []), (False, admin.DECLINED))
 
+    def test_a_prompt_nobody_answers_is_explained_not_crashed_on(self):
+        slow = subprocess.TimeoutExpired("powershell.exe", 300)
+        with mock.patch.object(admin, "state", return_value="current"), \
+                mock.patch.object(admin.subprocess, "run", side_effect=slow):
+            self.assertEqual(admin.run("harden_apply.ps1", []), (False, admin.NO_ANSWER))
+
     def test_an_old_journal_is_handed_over_once_then_deleted(self):
         saved = b'\xef\xbb\xbf{"previous": 0}'   # as earlier versions wrote it
         with tempfile.TemporaryDirectory() as tmp:

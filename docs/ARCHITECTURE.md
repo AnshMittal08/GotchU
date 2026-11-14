@@ -20,6 +20,7 @@ flowchart TB
         exposure["exposure<br/>what a thief could take"]
         harden["harden<br/>Windows protections"]
         tripwire["tripwire<br/>decoys and watched stores"]
+        respond["respond<br/>what to do after a theft"]
         vault["vault<br/>encrypted key files"]
         map[("secrets_map.json<br/>where apps keep secrets")]
     end
@@ -41,7 +42,8 @@ flowchart TB
     user --> cli
     user --> ui
     ui --> check & scan & exposure & harden & tripwire
-    cli --> check & scan & exposure & harden & tripwire & vault
+    cli --> check & scan & exposure & harden & tripwire & vault & respond
+    respond --> exposure
     exposure --> map
     tripwire --> map
     harden -- "asks Windows to elevate" --> happly --> defender
@@ -154,7 +156,8 @@ sequenceDiagram
     Y->>T: gotchu tripwire shows alarms and the list of readers
 ```
 
-Decoys are fake wallet files planted only where the real wallet app is not installed. Real stores are
+Decoys are fake wallet files and fake browser login files, planted only where the real app is not installed.
+The watcher marks a `heartbeat` file every 30 seconds, which is how `gotchu tripwire` knows it is alive. Real stores are
 the browser, Telegram and Discord login files from the secrets map. Reads of real stores are listed, not
 alarmed, until we know how often honest programs do it.
 

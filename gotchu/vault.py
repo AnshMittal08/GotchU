@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import tempfile
 from ctypes import wintypes
@@ -231,6 +232,32 @@ def remove(data_key, name, folder=FOLDER):
         raise KeyError(f"The vault has no file called {name}.")
     os.remove(os.path.join(folder, index.pop(name) + ".bin"))
     _save_index(data_key, index, folder)
+
+
+def _vault_files(folder):
+    return [n for n in os.listdir(folder) if n == "vault.json" or n.endswith(".bin")]
+
+
+def backup(dest, folder=FOLDER):
+    """Copy the vault, still encrypted, into a new or empty folder. Returns how many files were copied."""
+    if os.path.isdir(dest) and os.listdir(dest):
+        raise FileExistsError(f"{dest} is not empty. Choose a new folder, so nothing in it is overwritten.")
+    os.makedirs(dest, exist_ok=True)
+    files = _vault_files(folder)
+    for name in files:
+        shutil.copy2(os.path.join(folder, name), os.path.join(dest, name))
+    return len(files)
+
+
+def restore(src, folder=FOLDER):
+    """Bring a backup back. Only onto a PC with no vault, so a vault in use is never overwritten."""
+    if exists(folder):
+        raise FileExistsError("There is already a vault on this PC, and restoring would replace it. Nothing was changed.")
+    if not all(os.path.isfile(os.path.join(src, name)) for name in ("vault.json", "index.bin")):
+        raise ValueError(f"{src} does not hold a gotchu vault backup.")
+    os.makedirs(folder, exist_ok=True)
+    for name in _vault_files(src):
+        shutil.copy2(os.path.join(src, name), os.path.join(folder, name))
 
 
 def use(data_key, name, command, folder=FOLDER):

@@ -77,6 +77,23 @@ class VaultTests(unittest.TestCase):
             self.assertEqual(vault.unlock("correct horse battery", folder), key)
             self.assertEqual(vault.unlock(recovery, folder), key)           # the recovery slot is left as it was
 
+    def test_backup_and_restore_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first, copy, second = (os.path.join(tmp, n) for n in ("vault", "usb", "new-pc"))
+            vault.create("correct horse battery", first)
+            key = vault.unlock("correct horse battery", first)
+            secret = os.path.join(tmp, "server.pem")
+            with open(secret, "wb") as f:
+                f.write(b"PRIVATE KEY")
+            vault.add(key, secret, first)
+
+            self.assertEqual(vault.backup(copy, first), 3)                  # header, index, one file
+            self.assertRaises(FileExistsError, vault.backup, copy, first)   # never into a folder with files in it
+            self.assertRaises(FileExistsError, vault.restore, copy, first)  # never over a vault in use
+            vault.restore(copy, second)
+            self.assertEqual(vault.get(vault.unlock("correct horse battery", second), "server.pem", second), b"PRIVATE KEY")
+            self.assertRaises(ValueError, vault.restore, tmp, os.path.join(tmp, "nowhere"))
+
 
 if __name__ == "__main__":
     unittest.main()

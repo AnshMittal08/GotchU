@@ -3,7 +3,7 @@
 # Exit code 0 means done; otherwise the reason is in last-error.txt beside this script.
 param(
     [ValidateSet('on', 'off', 'restore')][string]$Action,
-    [string]$PlanFile,      # JSON: { decoys: [path], roots: [path], stores: [{ path, dir, name, owners, signer }] }
+    [string]$PlanFile,      # JSON: { decoys: [path], roots: [path], stores: [{ path, dir, name, owners, signer }], readers: [{ name, signer }] }
     [string]$PlanHash,      # SHA-256 of the plan as gotchu wrote it
     [switch]$Cut
 )
@@ -77,7 +77,8 @@ try {
         foreach ($s in @($plan.stores)) {
             try { Set-Watch $s.path ([bool]$s.dir) $false; $stores += $s } catch { }
         }
-        @{ decoys = $decoys; decoy_roots = $roots; stores = $stores; cut = [bool]$Cut; audit_before = $before } |
+        @{ decoys = $decoys; decoy_roots = $roots; stores = $stores; readers = @($plan.readers | Where-Object { $_ })
+           cut = [bool]$Cut; audit_before = $before } |
             ConvertTo-Json -Depth 5 | Set-Content $config -Encoding utf8
 
         # The watcher runs as SYSTEM from start-up. Reading the Security log needs administrator rights, so this is
@@ -107,7 +108,7 @@ try {
             if ($before -notlike '*Success*') { & $auditpol /set /subcategory:$FS /success:disable | Out-Null }
         }
         # Only the tripwire's own files: the helpers stay for harden and for switching on again (gotchu setup --remove).
-        foreach ($name in 'tripwire.json', 'alerts.jsonl', 'alerts.old.jsonl', 'sightings.jsonl', 'sightings.old.jsonl') {
+        foreach ($name in 'tripwire.json', 'heartbeat', 'alerts.jsonl', 'alerts.old.jsonl', 'sightings.jsonl', 'sightings.old.jsonl') {
             Remove-Item -LiteralPath (Join-Path $dest $name) -Force -ErrorAction SilentlyContinue
         }
     }

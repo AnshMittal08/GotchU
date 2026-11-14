@@ -91,7 +91,7 @@ flowchart TB
     found -- "Nothing" --> trip["gotchu tripwire<br/>any alarms or unknown readers?"]
     trip --> exp["What a thief could take<br/>this is what to assume is gone"]
     act --> exp
-    exp --> change["From another device: change passwords,<br/>sign out everywhere, replace keys"]
+    exp --> change["gotchu respond<br/>the checklist, in order, from another device"]
     change --> harden["Lock down this PC so it is harder next time"]
     harden --> done(["Recovered"])
 ```

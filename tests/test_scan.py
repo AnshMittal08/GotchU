@@ -60,6 +60,35 @@ class ScanTests(unittest.TestCase):
     def test_ordinary_snapshot_is_clean(self):
         self.assertEqual(report.level(scan.analyse(ORDINARY)), "ok")
 
+    def test_services_and_the_hosts_file(self):
+        def titles(snap):
+            return [(sev, title) for sev, title, _ in scan.analyse(snap)]
+
+        real = {"name": "Spooler", "title": "Print Spooler", "path": r"C:\Windows\System32\spoolsv.exe", "start": "Auto"}
+        fake = {"name": "upd", "title": "Updater", "path": r'"C:\Users\A\AppData\Roaming\upd\upd.exe" -s', "start": "Auto"}
+        self.assertEqual(titles({"services": [real]}), [])
+        self.assertEqual(titles({"services": [fake]})[0][0], "MEDIUM")
+        self.assertEqual(titles({"services": [{**fake, "start": "Disabled"}]}), [])
+
+        self.assertEqual(titles({"hosts": ["127.0.0.1 localhost", "192.168.1.5 host.docker.internal"]}), [])
+        self.assertEqual(titles({"hosts": ["10.0.0.9 intranet.example"]})[0][0], "MEDIUM")
+        self.assertEqual(titles({"hosts": ["0.0.0.0 update.microsoft.com www.virustotal.com"]})[0][0], "HIGH")
+
+    def test_extensions_loaded_from_a_folder(self):
+        import json
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as home:
+            profile = os.path.join(home, "Chrome", "Default")
+            os.makedirs(profile)
+            settings = {"aaaa": {"location": 1, "manifest": {"name": "From the store"}},
+                        "bbbb": {"location": 4, "path": r"C:\Users\A\ext", "manifest": {"name": "Helper"}}}
+            with open(os.path.join(profile, "Secure Preferences"), "w", encoding="utf-8") as f:
+                json.dump({"extensions": {"settings": settings}}, f)
+            secrets = {"browsers": [{"name": "Chrome", "engine": "chromium", "root": "%HOME%\\Chrome"}]}
+            found = scan.extension_findings({"HOME": home}, secrets)
+        self.assertEqual([t for _, t, _ in found], ["Extension loaded from a folder, not the store: Helper in Chrome"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -95,7 +95,8 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 - Use: every later claim is measured with it.
 
 ### C. Decoys and tripwire - decoys done, real stores in observe mode
-- As built: `gotchu tripwire` plants four decoy wallet files (only for apps that are not installed). A
+- As built: `gotchu tripwire` plants decoys only for apps that are not installed: four fake wallet files and,
+  since 2026-11-14, fake saved-login files for Brave and Vivaldi in a profile the real browser would never use. A
   watcher in Program Files (since 2026-11-13 run as SYSTEM from start-up, so it works on standard accounts;
   at first it ran at sign-in with the user's administrator rights) shows an alarm when one is read
   and, with `--cut`, blocks that program from the internet. Owner's choice: start alert-only, then cut.
@@ -138,9 +139,10 @@ Each phase has a check that proves it works and a rule for dropping or changing 
 - Proves it works: fake thief gets nothing usable from the vault; ordinary tools (git, ssh, docker) still work.
 - Drop rule: if daily work needs more than one unlock per session, redesign before release.
 
-### E. Respond
-- Build: what was readable at the time of a theft, and a recovery checklist in priority order, starting
-  with 20 services.
+### E. Respond - first version done
+- As built 2026-11-14: `gotchu respond` turns the exposure report into a checklist in priority order, and
+  `--sites` lists the websites with a saved password. It cannot say what was actually taken, and says so.
+- Next: per-service steps, starting with 20 services, and a timeline of what ran.
 - Proves it works: replay this laptop's incident and compare with what actually had to be done.
 
 ### F. Usable by everyone

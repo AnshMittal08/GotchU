@@ -3,7 +3,7 @@ import json
 import os
 import sys
 
-from . import __version__, check, exposure, harden, report, scan, tripwire
+from . import __version__, check, exposure, harden, report, respond, scan, tripwire
 
 
 def _choose_passphrase(getpass, prompt, nothing):
@@ -39,9 +39,18 @@ def _vault(args):
             recovery = vault.create(passphrase)
             print(f"\nVault created in {vault.FOLDER}\n\nRECOVERY KEY:  {recovery}\n\n{RECOVERY_NOTE}")
             return 0
+        if args.action == "restore":
+            vault.restore(args.folder)
+            print(f"Vault restored from {args.folder}. It opens with the passphrase or recovery key it had when it was backed up.")
+            return 0
         if not vault.exists():
             print("There is no vault yet. Make one with: gotchu vault create")
             return 1
+        if args.action == "backup":
+            count = vault.backup(args.folder)
+            print(f"Copied the vault ({count} files, still encrypted) to {args.folder}.\n"
+                  "The copy is useless without your passphrase or recovery key, so it is safe on a USB stick or in cloud storage.")
+            return 0
         key = vault.unlock(getpass.getpass("Vault passphrase (or recovery key): "))
         if args.action == "list":
             print("\n".join(sorted(vault.names(key))) or "The vault is empty.")
@@ -142,6 +151,13 @@ def main(argv=None):
     a.add_argument("name")
     act.add_parser("passphrase", help="choose a new passphrase (opens with the old one or the recovery key)")
     act.add_parser("recovery", help="make a new recovery key; the old one stops working")
+    a = act.add_parser("backup", help="copy the vault, still encrypted, to another folder or drive")
+    a.add_argument("folder", help="a new or empty folder")
+    a = act.add_parser("restore", help="bring a backed-up vault back onto a PC that has none")
+    a.add_argument("folder", help="the folder a backup was copied to")
+    p = sub.add_parser("respond", help="after running something bad: what to do, in what order")
+    p.add_argument("--json", action="store_true", help="print the result as JSON")
+    p.add_argument("--sites", action="store_true", help="also list the websites with a password saved on this PC (names only)")
     p = sub.add_parser("setup", help="install or update gotchu's administrator helpers in Program Files")
     p.add_argument("--remove", action="store_true", help="remove them, once nothing gotchu turned on still needs them")
     p = sub.add_parser("ui", help="open the gotchu window in your browser")
@@ -189,9 +205,13 @@ def _run(args):
         result = tripwire.result()
     elif args.command == "exposure":
         result = exposure.result()
+    elif args.command == "respond":
+        result = respond.result(with_sites=args.sites)
     else:
         result = scan.result() if args.command == "scan" else harden.result()
     print(json.dumps(result, indent=2) if args.json else report.render(result))
+    if args.command == "respond" and args.sites and not args.json:
+        print(f"\nWebsites with a password saved on this PC ({len(result['sites'])}):\n" + "\n".join(result["sites"]))
     return {"danger": 2, "warn": 1}.get(result["level"], 0)
 
 

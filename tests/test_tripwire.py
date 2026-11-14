@@ -35,10 +35,29 @@ class TripwireTests(unittest.TestCase):
                  "moved_in": [r"C:\Users\A\AppData\Roaming\Exodus"]}
         self.assertEqual(report.level(tripwire.analyse(state)), "warn")
         sighting = {"time": "2026-11-13T10:00:00", "program": r"C:\Program Files\Backup\backup.exe", "kind": "decoy",
-                    "reason": "installed", "store": "a decoy wallet file", "file": "f"}
+                    "reason": "installed", "store": "a decoy file", "file": "f"}
         found = tripwire.analyse({**state, "moved_in": [], "sightings": [sighting]})
         self.assertEqual(report.level(found), "warn")
-        self.assertIn("backup.exe read a decoy wallet file", [t for _, t, _ in found])
+        self.assertIn("backup.exe read a decoy file", [t for _, t, _ in found])
+
+    def test_reads_of_real_stores_are_grouped_and_weighed(self):
+        state = {"on": True, "cut": False, "decoys": ["f"], "stores": [], "alerts": [], "sightings": []}
+
+        def read(program, store, **more):
+            return {"time": "2026-11-14T09:13:21", "program": program, "store": store, "file": "f", **more}
+
+        edge = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        imports = [read(edge, f"Google Chrome (Profile 1: {f})", signed=True, known=True) for f in ("Login Data", "Web Data")]
+        found = tripwire.analyse({**state, "sightings": imports})
+        self.assertEqual(report.level(found), "ok")                      # a browser importing is information
+        self.assertIn("msedge.exe read Google Chrome 2 times", [t for _, t, _ in found])
+        thief = read(r"C:\Users\A\Downloads\setup.exe", "Google Chrome (Default: Login Data)", signed=False, known=False)
+        self.assertEqual(report.level(tripwire.analyse({**state, "sightings": imports + [thief]})), "danger")
+
+    def test_a_dead_watcher_is_reported(self):
+        state = {"on": True, "cut": False, "decoys": ["f"], "stores": [], "alerts": [], "sightings": [], "watching": False}
+        self.assertEqual(report.level(tripwire.analyse(state)), "warn")
+        self.assertIn("not running", tripwire.analyse(state)[0][1])
 
 
 def write(path, data):

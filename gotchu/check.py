@@ -32,6 +32,11 @@ PACKED_EXT = {".zip", ".7z", ".rar", ".gz", ".xz", ".bz2", ".zst", ".cab", ".png
 PACKED_MAGIC = (b"PK\x03\x04", b"7z\xbc\xaf", b"Rar!", b"\x1f\x8b", b"\x89PNG", b"\xff\xd8\xff", b"OggS",
                 b"ID3", b"RIFF", b"\x1a\x45\xdf\xa3", b"MZ", b"%PDF", b"RPA-", b"RENPY", b"\xfd7zXZ", b"BZh",
                 b"\x78\x01", b"\x78\x9c", b"\x78\xda", b"\x28\xb5\x2f\xfd")
+# Archives gotchu cannot open (it reads zip files and folders). They are never called clean: they are named
+# as not looked inside. A zip inside a zip counts too.
+CLOSED_EXT = {".7z", ".rar", ".zip", ".cab", ".tar", ".gz", ".tgz", ".xz", ".bz2", ".zst", ".arj", ".ace"}
+CLOSED_MAGIC = (b"7z\xbc\xaf", b"Rar!")
+CLOSED_TITLE = "Archive gotchu cannot look inside"
 BAIT = re.compile(r"(?i)crack|keygen|activator|patch(ed)?|repack|loader|free[_ -]?download|_free_|_get_|"
                   r"full[_ -]?version|unlocked|premium[_ -]?free|nulled")
 
@@ -163,10 +168,13 @@ def analyse(path, recursive=True):
             m.damaged = True
             return b""
 
-    padding, blobs, engine = [], [], False
+    padding, blobs, closed, engine = [], [], [], False
     by_folder = defaultdict(list)
     for m in items:
         by_folder[m.folder].append(m)
+
+        if not m.damaged and not m.encrypted and (m.ext in CLOSED_EXT or read(m, 8).startswith(CLOSED_MAGIC)):
+            closed.append(m)
 
         # 1. Padding: a huge file of nothing, added so scanners skip the archive.
         if m.size > 20 * 1024 * 1024:
@@ -254,6 +262,12 @@ def analyse(path, recursive=True):
     elif locked:
         add(MEDIUM, f"Password-protected archive: {len(locked)} files could not be checked",
             "Their contents are locked with a password. Their names were still checked. Locked: " + _names(locked))
+    if closed:
+        add(MEDIUM, f"{CLOSED_TITLE}: {_names(closed)}",
+            "It is an archive of a kind gotchu cannot open, or an archive inside the download, so nothing inside it was "
+            "checked (gotchu reads zip files and folders). "
+            "Extract it into a new, empty folder without opening anything, then check that folder. If it asks for a "
+            "password that came with the download, be more careful still: that is how malware gets past scanners.")
     damaged = [m for m in items if m.damaged]
     if damaged:
         add(MEDIUM, "Parts of the download could not be read",
@@ -283,4 +297,11 @@ def result(path):
     extra = {}
     if os.path.isfile(path):
         extra = {"sha256": sha256(path), "origin": download_origin(path)}
-    return report.build(path, analyse(path), LABELS, **extra)
+    findings = analyse(path)
+    labels = LABELS
+    worries = [title for sev, title, _ in findings if sev != INFO]
+    if worries and all(title.startswith(CLOSED_TITLE) for title in worries):
+        # Nothing looked wrong, but nothing inside was seen either. That is not the same as suspicious, or clean.
+        labels = {**LABELS, "warn": ("COULD NOT LOOK INSIDE", "gotchu could not open this, so it cannot say whether "
+                                     "it is safe. Extract it into a new folder without running anything, then check that folder.")}
+    return report.build(path, findings, labels, **extra)
