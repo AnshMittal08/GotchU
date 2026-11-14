@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GotchU</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' rx='21' fill='%2314171A'/%3E%3Cpath d='M65.2 28.8A27 27 0 1 0 74 48' fill='none' stroke='%23F2F3F4' stroke-width='10' stroke-linecap='round'/%3E%3Ccircle cx='55.5' cy='48' r='7.4' fill='%23FFB224'/%3E%3C/svg%3E">
+<style>
+  /* The house style, in four rules.
+     1. The dial. "GotchU guards the safe", so status is a safe's dial: one ring per protection, and the
+        rings line up at the top when you are protected. Its rim is a 24-hour clock that plots what happened.
+     2. The ring glyph. Every state in the app is the same small mark: closed ring = on, open ring = off,
+        ring with a caught dot = alarm. It is also the logo.
+     3. Ink, paper and one amber. Amber means "GotchU wants you to act here". Green and red are only states.
+     4. Flat and exact: solid panels, hairlines, no glow, no glass. Numbers line up.
+     Nothing is loaded from the internet: the fonts ship with gotchu. */
+  @font-face { font-family: "Barlow"; font-weight: 500; font-display: swap; src: url(/fonts/barlow-500.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow"; font-weight: 600; font-display: swap; src: url(/fonts/barlow-600.woff2) format("woff2"); }
+  @font-face { font-family: "Barlow Semi Condensed"; font-weight: 600; font-display: swap; src: url(/fonts/barlow-semicondensed-600.woff2) format("woff2"); }
+  :root {
+    --bg: #0F1113; --nav: #0B0D0E; --panel: #16191C; --raised: #1E2226; --line: #2A2F35; --text: #ECEEF0; --soft: #939AA3; --faint: #5A626B;
+    --amber: #FFB224; --amber-ink: #1A1200; --amber-text: #FFB224; --ok: #3DD68C; --bad: #FF5A4F; --on-bad: #fff; --shadow: none;
+    --head: "Barlow Semi Condensed", "Segoe UI", sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  }
+  :root[data-theme="light"] {
+    --bg: #F3F4F6; --nav: #FFFFFF; --panel: #FFFFFF; --raised: #F3F4F6; --line: #DDE0E4; --text: #14171A; --soft: #5B636C; --faint: #A0A7AF;
+    --amber: #FFB224; --amber-text: #A65F00; --ok: #18794E; --bad: #C92A22; --shadow: 0 1px 2px rgba(20, 23, 26, .05);
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 500 15px/1.45 var(--body); font-variant-numeric: tabular-nums; overflow: hidden; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: default; opacity: .5; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  h1, h2, h3 { font-family: var(--head); font-weight: 600; margin: 0; letter-spacing: .005em; }
+
+  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); height: 100%; }
+  .nav { background: var(--nav); border-right: 1px solid var(--line); padding: 18px 12px 14px; display: flex; flex-direction: column; gap: 18px; }
+  .brand { all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 2px 8px; font: 600 23px/1 var(--head); }
+  .brand svg { width: 24px; height: 24px; }
+  .nav nav { display: grid; gap: 2px; }
+  .nav nav button { all: unset; cursor: pointer; display: grid; grid-template-columns: 20px 1fr; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 7px; color: var(--soft); font-weight: 600; font-size: 14.5px; position: relative; }
+  .nav nav button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .nav nav button:hover { color: var(--text); background: var(--raised); }
+  .nav nav button[aria-current="page"] { color: var(--text); background: var(--raised); }
+  .nav nav button[aria-current="page"]::before { content: ""; position: absolute; left: -12px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 2px 2px 0; background: var(--amber); }
+  .nav nav hr { border: 0; border-top: 1px solid var(--line); margin: 8px 4px; }
+  .foot { margin-top: auto; display: grid; gap: 10px; padding: 0 4px; color: var(--soft); font-size: 12.5px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); }
+  .seg button { all: unset; cursor: pointer; text-align: center; padding: 4px 0; border-radius: 5px; font-size: 13px; font-weight: 600; color: var(--soft); }
+  .seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+
+  main { min-width: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+  .bar { height: 56px; padding: 0 24px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); }
+  .bar h1 { font-size: 21px; margin-right: auto; }
+  .badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 13.5px; font-weight: 600; }
+  .glyph { width: 18px; height: 18px; flex: none; }
+  .notice { margin: 14px 24px 0; padding: 10px 12px 10px 14px; border: 1px solid var(--amber); border-radius: 9px; background: color-mix(in srgb, var(--amber) 9%, var(--panel)); display: flex; align-items: center; gap: 14px; font-size: 14.5px; }
+  .notice span { margin-right: auto; }
+  .page { padding: 16px 24px 20px; overflow: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 11px; box-shadow: var(--shadow); min-width: 0; }
+  .panel > header { display: flex; align-items: baseline; gap: 10px; padding: 13px 16px 9px; }
+  .panel > header h2 { font-size: 17px; margin-right: auto; }
+  .panel > header small { color: var(--soft); font-size: 13px; }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 14px; font-weight: 600; font-size: 14.5px; white-space: nowrap; }
+  .btn:hover:not(:disabled) { background: var(--raised); }
+  .btn.go { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+  .btn.go:hover:not(:disabled) { background: color-mix(in srgb, var(--amber) 88%, #fff); }
+  .btn.bad { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
+  .btn.bad:hover:not(:disabled) { background: color-mix(in srgb, var(--bad) 90%, #000); }
+  .btn.small { padding: 4px 12px; font-size: 13.5px; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* Home */
+  .home { display: grid; grid-template-columns: 372px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 14px; height: 100%; }
+  .status { grid-row: 1 / span 2; display: flex; flex-direction: column; padding: 18px 20px 20px; }
+  .dialbox { position: relative; width: 100%; height: 244px; margin: 0 auto 12px; display: grid; place-items: center; }
+  #dial { width: 244px; height: 244px; }
+  .status h2 { font-size: 27px; line-height: 1.1; }
+  .status h2.bad { color: var(--bad); }
+  .status p { margin: 8px 0 14px; color: var(--soft); }
+  .status code { display: block; margin: -6px 0 14px; font: 500 12.5px/1.4 Consolas, monospace; color: var(--soft); overflow-wrap: anywhere; }
+  .legend { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, auto); justify-content: space-between; font-size: 12.5px; color: var(--soft); }
+  .legend b { display: block; font: 600 20px/1.1 var(--head); color: var(--text); }
+  .under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
+  .under .panel { display: flex; flex-direction: column; min-height: 0; }
+  .under .rows { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+  .rows { margin: 0; padding: 0 6px 6px; list-style: none; }
+  .rows li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 1px 12px; align-items: center; padding: 9px 10px; border-top: 1px solid var(--line); }
+  .rows li:first-child { border-top: 0; }
+  .rows li > .glyph { grid-row: span 2; align-self: start; margin-top: 2px; }
+  .rows b { font-weight: 600; overflow-wrap: anywhere; }
+  .rows span { grid-column: 2; color: var(--soft); font-size: 13.5px; overflow-wrap: anywhere; }
+  .rows em { font-style: normal; color: var(--text); }
+  .rows li > .end { grid-column: 3; grid-row: 1 / span 2; display: flex; align-items: center; gap: 12px; color: var(--soft); font-size: 13px; white-space: nowrap; }
+  .rows li.plain { grid-template-columns: minmax(0, 1fr) auto; }
+  .rows li.plain span { grid-column: 1; } .rows li.plain > .end { grid-column: 2; }
+  .rows li.one b, .rows li.one span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rows li.one { padding-top: 7px; padding-bottom: 7px; }
+  .rows .none { display: block; padding: 10px; color: var(--soft); }
+  .guard li { cursor: default; }
+  .guard li:hover { background: color-mix(in srgb, var(--raised) 60%, transparent); }
+  .todo li { grid-template-columns: 30px minmax(0, 1fr) auto; cursor: pointer; counter-increment: n; }
+  .todo { counter-reset: n; }
+  .todo li::before { content: counter(n); grid-row: span 2; align-self: start; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line); color: var(--soft); font: 600 14px/1 var(--head); }
+  .todo li.done::before { content: "\2713"; background: var(--ok); border-color: var(--ok); color: var(--panel); }
+  .todo li.done b { color: var(--soft); text-decoration: line-through; }
+
+  .switch { all: unset; cursor: pointer; width: 40px; height: 22px; border-radius: 11px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--faint); position: relative; flex: none; transition: background-color .15s; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--soft); transition: translate .18s, background-color .15s; }
+  .switch[aria-checked="true"] { background: var(--amber); box-shadow: none; }
+  .switch[aria-checked="true"]::after { translate: 18px 0; background: var(--amber-ink); }
+  .switch:disabled { opacity: .45; cursor: default; }
+
+  /* Pages built from a lead and lists */
+  .lead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 20px; align-items: start; margin-bottom: 14px; }
+  .lead h2 { font-size: 27px; line-height: 1.1; }
+  .lead h2.bad { color: var(--bad); } .lead h2.ok { color: var(--ok); } .lead h2.warn { color: var(--amber-text); }
+  .lead p { margin: 0; grid-column: 1; color: var(--soft); max-width: 78ch; }
+  .lead .acts { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+  .lead small { grid-column: 1; color: var(--soft); font-size: 12.5px; overflow-wrap: anywhere; }
+  .filechip { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 3px 10px 3px 4px; border: 1px solid var(--line); border-radius: 6px; font-size: 13.5px; font-weight: 600; max-width: 100%; }
+  .filechip i { font-style: normal; font-size: 10.5px; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; background: var(--raised); color: var(--soft); }
+  .stack { display: grid; gap: 14px; }
+  .meter { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; margin: 2px 0 14px; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--amber); transition: width .25s; }
+  .meter.busy i { width: 30%; animation: slide 1.1s linear infinite; }
+  @keyframes slide { from { translate: -100% 0; } to { translate: 340% 0; } }
+  .sites { margin: 0; padding: 6px 16px 14px; list-style: none; columns: 3; font-size: 14px; }
+  .sites li { padding: 2px 0; overflow-wrap: anywhere; break-inside: avoid; }
+
+  .toast { position: fixed; z-index: 8; left: 50%; bottom: 22px; translate: -50% 90px; max-width: min(640px, 100% - 48px); padding: 10px 16px; border-radius: 9px; font-size: 14.5px; font-weight: 600;
+           background: var(--text); color: var(--bg); transition: translate .25s; text-align: center; box-shadow: 0 8px 28px rgba(0, 0, 0, .28); }
+  .toast.open { translate: -50% 0; }
+  .toast.bad { background: var(--bad); color: var(--on-bad); }
+  .veil { position: fixed; z-index: 7; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 78%, transparent); }
+  .hello { width: min(540px, 100% - 48px); padding: 26px 28px 22px; box-shadow: 0 24px 70px rgba(0, 0, 0, .35); }
+  .hello h2 { font-size: 30px; }
+  .hello > p { margin: 8px 0 14px; color: var(--soft); }
+  .hello .rows { padding: 0; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 9px; }
+  .hello label { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; cursor: pointer; }
+  .hello input { width: 17px; height: 17px; accent-color: var(--amber); }
+  .hello small { display: block; margin-top: 12px; color: var(--soft); font-size: 12.5px; }
+
+  @media (max-width: 1080px) { .home { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; } .status { grid-row: auto; } .dialbox { max-width: 280px; } .under { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) { .app { grid-template-columns: 1fr; } .nav { display: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 48 48">
+    <path d="M34.7 12.1A16 16 0 1 0 40 24" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/>
+    <circle cx="28.6" cy="24" r="4.5" fill="var(--amber)"/>
+  </symbol>
+  <!-- The ring glyph: one mark for every state. -->
+  <symbol id="g-on" viewBox="0 0 18 18"><circle cx="9" cy="9" r="6.500" fill="none" stroke="var(--ok)" stroke-width="2"/><circle cx="9" cy="9" r="2.300" fill="var(--ok)"/></symbol>
+  <symbol id="g-off" viewBox="0 0 18 18"><path d="M13 3.900A6.500 6.500 0 1 0 15.500 9" fill="none" stroke="var(--faint)" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="g-warn" viewBox="0 0 18 18"><path d="M13 3.900A6.500 6.500 0 1 0 15.500 9" fill="none" stroke="var(--amber-text)" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="g-alarm" viewBox="0 0 18 18"><path d="M13 3.900A6.500 6.500 0 1 0 15.500 9" fill="none" stroke="var(--bad)" stroke-width="2" stroke-linecap="round"/><circle cx="10.800" cy="9" r="2.400" fill="var(--bad)"/></symbol>
+  <symbol id="g-info" viewBox="0 0 18 18"><circle cx="9" cy="9" r="6.500" fill="none" stroke="var(--faint)" stroke-width="2" stroke-dasharray="2.500 2.500"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="nav">
+    <button class="brand" data-go="home" aria-label="GotchU, home"><svg><use href="#mark"/></svg>GotchU</button>
+    <nav aria-label="Pages">
+      <button data-go="home"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.500"/><path d="M15.600 5.200A7.500 7.500 0 1 0 17.500 10"/></svg>Home</button>
+      <button data-go="check"><svg viewBox="0 0 20 20"><path d="M5.500 2.500h6l3.500 3.500v3.500M5.500 2.500v15h3.500"/><circle cx="13.500" cy="14" r="2.800"/><path d="M15.600 16.200l2 2"/></svg>Check a download</button>
+      <button data-go="protect"><svg viewBox="0 0 20 20"><path d="M10 2.500l6.500 2.500v5c0 4-2.800 6.600-6.500 7.500-3.700-.900-6.500-3.500-6.500-7.500V5z"/><path d="M7.200 10l2 2 3.700-3.800"/></svg>Protection</button>
+      <button data-go="hacked"><svg viewBox="0 0 20 20"><path d="M7.800 3h4.400v4.800H17v4.400h-4.800V17H7.800v-4.800H3V7.800h4.800z"/></svg>I think I was hacked</button>
+      <hr>
+      <button data-go="thief"><svg viewBox="0 0 20 20"><path d="M1.500 10S4.800 4.200 10 4.200 18.500 10 18.500 10 15.200 15.800 10 15.800 1.500 10 1.500 10z"/><circle cx="10" cy="10" r="2.400"/></svg>What a thief sees</button>
+      <button data-go="scan"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.500"/><path d="M10 10l4.800-2.800M10 2.500V5"/></svg>Scan this PC</button>
+      <button data-go="log"><svg viewBox="0 0 20 20"><path d="M4 5h12M4 10h12M4 15h8"/></svg>History</button>
+    </nav>
+    <div class="foot">
+      <div class="seg" role="group" aria-label="Look"><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+      <button class="btn small" id="shortcut" hidden></button>
+      <span id="version">Runs only on this PC.</span>
+    </div>
+  </aside>
+
+  <main>
+    <header class="bar"><h1 id="title">Home</h1><span class="badge" id="badge"></span></header>
+    <div class="notice" id="notice" hidden><span>GotchU was updated. Its background part still needs the update.</span><button class="btn go small" id="finish">Finish the update</button></div>
+
+    <section class="page" id="p-home">
+      <div class="home">
+        <div class="panel status" aria-live="polite">
+          <div class="dialbox"><canvas id="dial" role="img" aria-label="Status dial"></canvas></div>
+          <h2 id="s-h">Checking this PC</h2>
+          <p id="s-p"></p>
+          <code id="s-path" hidden></code>
+          <div class="acts" id="s-acts"></div>
+          <div class="legend">
+            <div><b id="l-stores">0</b>login stores watched</div>
+            <div><b id="l-decoys">0</b>decoys planted</div>
+            <div><b id="l-alarms">0</b>alarms in 24 hours</div>
+          </div>
+        </div>
+        <div class="panel">
+          <header><h2>Protection</h2><small id="guard-count"></small></header>
+          <ul class="rows guard" id="guard"></ul>
+        </div>
+        <div class="under">
+          <div class="panel">
+            <header><h2>Downloads to check</h2><button class="btn small" data-pick="file">Choose a file</button></header>
+            <ul class="rows" id="downloads"></ul>
+          </div>
+          <div class="panel">
+            <header><h2>Activity</h2><button class="btn small" data-go="log">All history</button></header>
+            <ul class="rows" id="activity"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page" id="p-page" hidden>
+      <div class="lead" aria-live="polite">
+        <div><span class="filechip" id="p-file" hidden><i id="p-ext"></i><span id="p-name"></span></span><h2 id="p-h"></h2></div>
+        <p id="p-p"></p>
+        <small id="p-facts"></small>
+        <div class="acts" id="p-acts"></div>
+      </div>
+      <div class="meter" id="meter" hidden><i></i></div>
+      <div class="stack" id="p-body"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+<div class="veil" id="veil" hidden>
+  <div class="panel hello" role="dialog" aria-labelledby="hello-h">
+    <h2 id="hello-h">Welcome to GotchU</h2>
+    <p>Some malware does not break your PC. It quietly copies your saved passwords and logins. GotchU is here for that.</p>
+    <ul class="rows">
+      <li><svg class="glyph"><use href="#g-on"/></svg><b>Checks a download before you open it</b></li>
+      <li><svg class="glyph"><use href="#g-on"/></svg><b>Warns you the moment a program goes for your passwords</b><span>And can cut that program off from the internet.</span></li>
+      <li><svg class="glyph"><use href="#g-on"/></svg><b>Tells you what to do if you think you were hacked</b></li>
+    </ul>
+    <label><input type="checkbox" id="hello-shortcut" checked> Add GotchU to the Start menu and the desktop</label>
+    <div class="acts"><button class="btn go" id="hello-go">Turn on protection</button><button class="btn" id="hello-skip">Not now</button></div>
+    <small>Windows will ask for your permission once or twice. Choose Yes. Everything can be switched off again.</small>
+  </div>
+</div>
+
+<script>
+(() => {
+  // The access token arrives after the # so it never reaches a server log; keep it for reloads.
+  let token = location.hash.slice(1);
+  const query = new URLSearchParams(location.search);
+  if (token) { sessionStorage.setItem("gotchu", token); history.replaceState(null, "", location.pathname); }
+  else token = sessionStorage.getItem("gotchu") || "";
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const glyph = (state) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"), u = document.createElementNS("http://www.w3.org/2000/svg", "use");
+                             s.setAttribute("class", "glyph"); u.setAttribute("href", "#g-" + state); s.append(u); return s; };
+  const root = document.documentElement;
+  const S = { st: null, locks: null, mode: "home", check: null, scanning: false, busy: false, report: null, steps: null, done: [], sites: null, problem: "", hover: -1 };
+  const TITLES = { home: "Home", check: "Check a download", protect: "Protection", hacked: "I think I was hacked", thief: "What a thief sees", scan: "Scan this PC", log: "History" };
+  const REPORTS = { scan: ["/api/scan", "Scanning this PC", "Looking at what is running and what starts with Windows. This takes a few seconds."],
+                    thief: ["/api/exposure", "Counting what is here", "Looking where a password thief looks. Nothing is opened, copied or shown."],
+                    log: ["/api/tripwire/log", "Reading the history", "Alarms, and programs other than the owner that read your logins."] };
+  const UAC = "Windows is asking for your permission. Choose Yes. If you see nothing, look for a flashing icon on the taskbar.";
+
+  function setTheme(name) {
+    root.dataset.theme = name === "light" || name === "dark" ? name : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.theme === root.dataset.theme));
+  }
+  setTheme(query.get("theme") || "system");
+
+  async function api(path, body) {
+    const res = await fetch(path, { method: body === undefined ? "GET" : "POST",
+      headers: { "X-GotchU-Token": token, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Something went wrong.");
+    return data;
+  }
+  let toastTimer;
+  function toast(text, stay, bad) {
+    const t = $("toast"); clearTimeout(toastTimer);
+    if (!text) return t.classList.remove("open");
+    t.textContent = text; t.classList.toggle("bad", !!bad); t.classList.add("open");
+    if (!stay) toastTimer = setTimeout(() => t.classList.remove("open"), bad ? 9000 : 4500);
+  }
+  // Anything that changes this PC: one at a time, with the Windows prompt explained while it waits.
+  async function act(path, body, waiting) {
+    if (S.busy) return null;
+    S.busy = true; toast(waiting, true); render();
+    try {
+      const r = await api(path, body);
+      if (r.status) S.st = r.status;
+      if (r.locks) S.locks = r.locks;
+      toast(r.message || (r.ok === false ? "That did not work." : ""), false, r.ok === false);
+      return r;
+    } catch (e) { toast(e.message, false, true); return null; }
+    finally { S.busy = false; render(); }
+  }
+
+  const base = (p) => (p || "").split(/[\\/]/).pop();
+  const size = (n) => n > 1 << 30 ? (n / (1 << 30)).toFixed(1) + " GB" : n > 1 << 20 ? Math.round(n / (1 << 20)) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+  const ago = (t) => { const d = (Date.now() / 1000 - t) / 86400; return d < 1 ? "today" : d < 2 ? "yesterday" : d < 60 ? Math.round(d) + " days ago" : Math.round(d / 30) + " months ago"; };
+  const sentence = (v) => v.charAt(0) + v.slice(1).toLowerCase();
+  const clock = (iso) => { const d = new Date(iso); if (isNaN(d)) return iso; const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                           return d.toDateString() === new Date().toDateString() ? hm : d.toLocaleDateString([], { day: "numeric", month: "short" }) + ", " + hm; };
+  const strict = () => S.locks ? S.locks.filter((k) => k.can_apply) : null;
+
+  // The three that decide whether you are protected, in dial order (outer to inner): theft alarm, cut-off, right-click.
+  function core() { if (!S.st) return [null, null, null]; const t = S.st.tripwire; return [t.on && t.watching, t.on && t.cut, S.st.menu]; }
+  const missing = () => core().filter((x) => x === false).length;
+  const level = () => !S.st ? "wait" : S.st.tripwire.alert ? "danger" : missing() ? "warn" : "ok";
+
+  function button(label, cls, fn) { const b = el("button", "btn " + cls, label); b.disabled = S.busy; b.addEventListener("click", fn); return b; }
+  function toggle(on, label, fn, disabled) {
+    const b = el("button", "switch"); b.setAttribute("role", "switch"); b.setAttribute("aria-checked", on ? "true" : "false"); b.setAttribute("aria-label", label);
+    b.disabled = S.busy || !!disabled; b.addEventListener("click", fn); return b;
+  }
+  function row(mark, title, detail, end, cls) {
+    const li = el("li", cls || ""); if (mark) li.append(glyph(mark)); else li.classList.add("plain");
+    li.append(el("b", "", title));
+    if (detail) { const s = el("span"); s.append(...[].concat(detail)); li.append(s); }
+    if (end) { const box = el("div", "end"); box.append(...[].concat(end)); li.append(box); }
+    return li;
+  }
+  function panel(title, note, list) { const p = el("div", "panel"), h = el("header"); h.append(el("h2", "", title)); if (note) h.append(el("small", "", note)); p.append(h, list); return p; }
+  const catchOf = (text) => [" ", el("em", "", "The catch:"), " " + text];
+
+  const setTrip = (on, cut) => act("/api/tripwire", { on, cut }, UAC);
+  const setMenu = (on) => act("/api/menu", { on }, "Changing the right-click menu.");
+  async function protectAll(shortcut) {
+    const t = S.st.tripwire;
+    if (!(t.on && t.watching && t.cut)) { const r = await setTrip(true, true); if (!r || r.ok === false) return; }
+    if (!S.st.menu) await setMenu(true);
+    if (shortcut && !S.st.shortcut) await act("/api/shortcut", { on: true }, "Adding GotchU to the Start menu.");
+  }
+  function go(mode) {
+    S.mode = mode; S.scanning = false; S.sites = null;
+    if (mode === "check") S.check = null;
+    if (REPORTS[mode]) loadReport(mode);
+    if (mode === "hacked") loadSteps();
+    if (mode === "home" || mode === "check") refresh();
+    render();
+  }
+
+  /* ---------- Home ---------- */
+  function guardRows(full) {
+    const t = S.st.tripwire, alarmOn = t.on && t.watching, locks = strict(), on = locks ? locks.filter((k) => k.on).length : 0;
+    const rows = [
+      [t.alert ? "alarm" : alarmOn ? "on" : "warn", "Theft alarm",
+       full ? ["GotchU hides fake wallet and login files among your real ones. No honest program has a reason to open them, so if one is opened you are warned at once.", ...catchOf("Windows asks for your permission once.")]
+            : t.alert ? "Caught " + base(t.alert.program) + ". Answer it beside the dial." : t.on && !t.watching ? "It has stopped. Switch it off and on again." : alarmOn ? t.decoys + " decoy files are hidden among your real ones." : "Warns you the moment a program goes for your passwords.",
+       toggle(alarmOn, "Theft alarm", () => setTrip(!alarmOn, t.cut))],
+      [t.on && t.cut ? "on" : "warn", "Cut off the thief",
+       full ? ["When the alarm goes off, that program loses its internet, so it cannot send what it copied.", ...catchOf("an app you have just installed could set it off. One click in GotchU lifts the block.")]
+            : t.on && t.cut ? "A program that sets off the alarm loses its internet." : "Blocks that program from the internet, so nothing is sent.",
+       toggle(t.on && t.cut, "Cut off the thief", () => setTrip(true, !(t.on && t.cut)))],
+      [S.st.menu ? "on" : "warn", "Right-click check",
+       full ? ["Adds Check with GotchU to the menu you get when you right-click a file. On Windows 11 it is under Show more options.", ...catchOf("none.")]
+            : S.st.menu ? "Right-click any file, then Check with GotchU." : "Check any download from File Explorer with a right-click.",
+       toggle(S.st.menu, "Right-click check", () => setMenu(!S.st.menu))],
+    ];
+    if (!full) rows.push([!locks ? "info" : on === locks.length ? "on" : "off", "Stricter Windows settings",
+       !locks ? "Reading your Windows settings." : "Optional. " + on + " of " + locks.length + " are on.", (() => { const b = el("button", "btn small", "Choose"); b.addEventListener("click", () => go("protect")); return b; })()]);
+    return rows.map(([mark, name, text, control], i) => { const li = row(mark, name, text, control);
+      li.addEventListener("mouseenter", () => (S.hover = i)); li.addEventListener("mouseleave", () => (S.hover = -1)); return li; });
+  }
+  function activityRows() {
+    const out = S.st.events.map((e) => e.kind === "alarm"
+      ? row("alarm", base(e.program) + " opened a decoy file", clock(e.time) + ". " + (e.cut ? "Cut off from the internet." : "Not blocked."), null, "one")
+      : row("warn", base(e.program) + " read " + e.what, clock(e.time) + (e.count > 1 ? ", " + e.count + " times." : ".") + " Not its owner.", null, "one"));
+    if (S.st.last_scan) out.push(row(S.st.last_scan.level === "ok" ? "on" : "warn", "Scan of this PC", sentence(ago(S.st.last_scan.time)) + ". " + (S.st.last_scan.level === "ok" ? "Nothing found." : "Found things to look at."), null, "one"));
+    return out.length ? out.slice(0, 6) : [el("span", "none", "Nothing yet. Alarms and unusual reads of your logins appear here.")];
+  }
+  function downloadRows(limit) {
+    const d = S.st.downloads.slice(0, limit);
+    if (!d.length) return [el("span", "none", "Nothing new in your Downloads folder.")];
+    return d.map((f) => { const b = el("button", "btn small", "Check"); b.addEventListener("click", () => check(f.path));
+      return row(null, f.name, size(f.size) + ", " + ago(f.modified), b, "one"); });
+  }
+  function homeWords() {
+    const lv = level(), st = S.st, off = missing(), h = $("s-h"), acts = $("s-acts");
+    $("s-path").hidden = true; h.className = "";
+    const set = (head, text, buttons) => { h.textContent = head; $("s-p").textContent = text; acts.replaceChildren(...buttons); };
+    if (S.problem && !st) return set("GotchU could not start", S.problem, []);
+    if (lv === "wait") return set("Checking this PC", "Seeing which protections are on.", []);
+    const scan = st.last_scan ? "Last scan " + ago(st.last_scan.time) + ": " + (st.last_scan.level === "ok" ? "nothing found." : "things to look at.") : "This PC has not been scanned yet.";
+    if (lv === "ok") return set("This PC is protected", "The theft alarm is on, and nothing has set it off. " + scan, [button("Scan this PC", "", () => go("scan"))]);
+    if (lv === "warn") return set(off === 3 ? "Protection is off" : off === 1 ? "1 protection is off" : off + " protections are off",
+                                  (off === 3 ? "GotchU is not watching this PC yet." : "You are only partly protected.") + " One click switches on everything in the list.",
+                                  [button("Turn on protection", "go", () => protectAll(false))]);
+    const a = st.tripwire.alert;
+    h.className = "bad"; $("s-path").hidden = false; $("s-path").textContent = a.program;
+    set(base(a.program) + " opened a decoy", clock(a.time) + ". " + (a.cut ? "GotchU cut it off from the internet." : "It was not blocked.") + " Do you know this program?",
+        [button("No, show me what to do", "bad", () => go("hacked")), button("Yes, it is mine", "", () => act("/api/alarm", {}, UAC))]);
+  }
+
+  /* ---------- pages ---------- */
+  function lead(h, p, buttons, tone, file, facts) {
+    $("p-h").textContent = h; $("p-h").className = tone || ""; $("p-p").textContent = p || ""; $("p-facts").textContent = facts || "";
+    $("p-acts").replaceChildren(...(buttons || []));
+    $("p-file").hidden = !file;
+    if (file) { $("p-ext").textContent = file.ext; $("p-name").textContent = file.name; }
+  }
+  function protectPage() {
+    const three = el("ul", "rows guard"); three.append(...guardRows(true));
+    const out = [panel("The three that matter most", (3 - missing()) + " of 3 on", three)];
+    if (!S.locks) { const l = el("ul", "rows"); l.append(el("span", "none", "Reading your Windows settings. This takes a few seconds.")); out.push(panel("Stricter Windows settings", "optional", l)); return out; }
+    const mine = el("ul", "rows"), theirs = el("ul", "rows");
+    for (const k of S.locks) {
+      if (!k.can_apply) { theirs.append(row(k.on ? "on" : "off", k.name, k.on ? k.stops : [k.stops + " ", el("em", "", k.alternative)])); continue; }
+      mine.append(row(k.on ? "on" : "off", k.name, [k.stops, ...catchOf(k.cost), ...(k.on && !k.can_undo ? [" Already on in Windows."] : [])],
+                      toggle(k.on, k.name, () => act("/api/lock", { key: k.key, undo: k.on }, UAC), k.on && !k.can_undo)));
+    }
+    out.push(panel("Stricter Windows settings", "optional: each has a catch, and GotchU can put each back exactly as it was", mine), panel("Only Windows can change these", "", theirs));
+    return out;
+  }
+  function stepsPage() {
+    if (S.sites) { const ul = el("ul", "sites"); ul.append(...S.sites.map((s) => el("li", "", s)));
+      return [panel(S.sites.length + " websites have a password saved on this PC", "names only: GotchU never reads a password", ul)]; }
+    const list = el("ol", "rows todo");
+    if (!S.steps) { list.append(el("span", "none", "Building the list from what is saved on this PC.")); return [panel("What to do", "", list)]; }
+    for (const s of S.steps) {
+      const end = [];
+      if (s.title.startsWith("Change the")) { const b = el("button", "btn small", "Show the websites"); b.addEventListener("click", async (e) => { e.stopPropagation();
+        try { S.sites = (await api("/api/respond/sites", {})).sites; render(); } catch (err) { toast(err.message, false, true); } }); end.push(b); }
+      if (s.title.startsWith("Clean this PC")) { const b = el("button", "btn small", "Scan now"); b.addEventListener("click", (e) => { e.stopPropagation(); go("scan"); }); end.push(b); }
+      const li = row(null, s.title, s.detail, end.length ? end : null, S.done.includes(s.title) ? "done" : ""); li.classList.remove("plain");
+      li.addEventListener("click", async () => { const done = !S.done.includes(s.title);
+        try { S.done = (await api("/api/respond/done", { title: s.title, done })).done; render(); } catch (err) { toast(err.message, false, true); } });
+      list.append(li);
+    }
+    return [panel("What to do", "click a step when it is done", list)];
+  }
+  const SEV = { HIGH: "alarm", MEDIUM: "warn", INFO: "info" };
+  function findings(list, title, note) { const ul = el("ul", "rows"); ul.append(...(list.length ? list.map((f) => row(SEV[f.severity], f.title, f.detail)) : [el("span", "none", "Nothing to show.")])); return panel(title, note, ul); }
+  async function loadReport(mode) {
+    S.report = null; S.problem = "";
+    try { const r = await api(REPORTS[mode][0], {}); if (S.mode !== mode) return; S.report = r; if (mode === "scan") refresh(); }
+    catch (e) { S.problem = e.message; }
+    render();
+  }
+  async function loadSteps() {
+    try { const r = await api("/api/respond", {}); S.steps = r.steps; S.done = r.done; S.advice = r.advice; } catch (e) { toast(e.message, false, true); }
+    render();
+  }
+  async function check(path) {
+    if (!path) return;
+    const name = base(path), dot = name.lastIndexOf(".");
+    S.check = { name, ext: (dot > 0 ? name.slice(dot + 1, dot + 5) : "file").toUpperCase(), path };
+    S.mode = "check"; S.scanning = true; render();
+    const started = Date.now();
+    try {
+      const r = await api("/api/check", { path });
+      await new Promise((ok) => setTimeout(ok, Math.max(0, 700 - (Date.now() - started))));
+      if (!r.is_file) S.check.ext = "FOLDER";
+      S.check.result = r;
+    } catch (e) { toast(e.message, false, true); S.check = null; }
+    S.scanning = false; render();
+  }
+  async function pick(folder) {
+    try { const { path } = await api("/api/browse", { folder }); if (path) check(path); } catch (e) { toast(e.message, false, true); }
+  }
+  function checkPage(back) {
+    const c = S.check;
+    if (!c) { const ul = el("ul", "rows"); ul.append(...downloadRows(12));
+      lead("Check it before you open it", "GotchU reads the file without running it and looks for the tricks malware uses to get past antivirus.",
+           [button("Choose a file", "go", () => pick(false)), button("Choose a folder", "", () => pick(true))]);
+      return [panel("New in your Downloads", "zips, installers and scripts", ul)]; }
+    if (S.scanning || !c.result) { lead("Reading it", "Without running it. This takes a second or two.", [], "", c); return []; }
+    const r = c.result, bad = r.level !== "ok";
+    const head = r.level === "danger" ? "Do not open this" : r.level === "ok" ? "No tricks found" : /COULD NOT/.test(r.verdict) ? "Could not look inside" : "Be careful with this";
+    const acts = [];
+    if (bad && r.is_file) acts.push(button("Move it to the Recycle Bin", r.level === "danger" ? "bad" : "go", async () => {
+      const done = await act("/api/delete", { path: r.path }, "Moving it to the Recycle Bin."); if (done && done.ok) go("check"); }));
+    acts.push(button("Show in folder", "", () => api("/api/reveal", { path: r.path }).catch((e) => toast(e.message, false, true))), button("Check another", "", () => go("check")));
+    const facts = [r.origin ? "Downloaded from " + r.origin + "." : "", r.sha256 ? "SHA-256 " + r.sha256 : ""].filter(Boolean).join("  ");
+    lead(head, r.advice, acts, r.level === "danger" ? "bad" : r.level, c, facts);
+    const main = r.findings.filter((f) => f.severity !== "INFO"), info = r.findings.filter((f) => f.severity === "INFO");
+    return [...(main.length ? [findings(main, "What GotchU found", main.length === 1 ? "1 thing" : main.length + " things")] : []), findings(info, "What it looked at", "")];
+  }
+
+  /* ---------- render ---------- */
+  function render() {
+    const lv = level(), st = S.st, off = missing(), home = S.mode === "home";
+    $("title").textContent = TITLES[S.mode];
+    document.querySelectorAll(".nav nav button").forEach((b) => b.dataset.go === S.mode ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+    $("badge").replaceChildren(glyph(lv === "ok" ? "on" : lv === "danger" ? "alarm" : lv === "warn" ? "warn" : "info"),
+      lv === "wait" ? "Checking" : lv === "ok" ? "Protected" : lv === "warn" ? (off === 1 ? "1 protection off" : off + " protections off") : "Alarm waiting");
+    $("p-home").hidden = !home; $("p-page").hidden = home;
+    $("notice").hidden = !(st && st.helpers === "different"); $("finish").disabled = S.busy;
+    if (st) {
+      $("version").textContent = "Version " + st.version + ". Runs only on this PC.";
+      $("shortcut").hidden = false; $("shortcut").textContent = st.shortcut ? "Remove shortcuts" : "Add to Start menu";
+      $("veil").hidden = st.welcomed || !home || S.busy || !!st.tripwire.alert;      // an alarm comes first
+      $("hello-go").textContent = off ? "Turn on protection" : "Got it";
+    }
+    if (home) {
+      homeWords();
+      if (st) {
+        $("guard").replaceChildren(...guardRows(false)); $("guard-count").textContent = (3 - off) + " of 3 on";
+        $("downloads").replaceChildren(...downloadRows(4)); $("activity").replaceChildren(...activityRows());
+        $("l-stores").textContent = st.tripwire.on ? st.tripwire.stores : 0; $("l-decoys").textContent = st.tripwire.on ? st.tripwire.decoys : 0;
+        const day = Date.now() - 864e5; $("l-alarms").textContent = st.marks.filter((m) => m.kind === "alarm" && new Date(m.time) > day).length;
+      }
+      return;
+    }
+    const meter = $("meter"), body = $("p-body"), top = $("p-page").scrollTop; meter.hidden = true; meter.className = "meter";
+    let parts = [];
+    if (S.mode === "check") { parts = checkPage(); if (S.scanning) { meter.hidden = false; meter.classList.add("busy"); } }
+    else if (S.mode === "protect") { lead("Your protection", "Each switch says what it does and what the catch is. Anything you switch on here can be switched off again.", []); parts = st ? protectPage() : []; }
+    else if (S.mode === "hacked") {
+      const n = S.steps ? S.steps.filter((s) => S.done.includes(s.title)).length : 0, all = S.steps ? S.steps.length : 0;
+      lead("Do these, in this order", (S.advice ? S.advice.replace(/^gotchu/, "GotchU") + " " : "") + (all ? n + " of " + all + " done." : ""),
+           S.sites ? [button("Back to the list", "", () => { S.sites = null; render(); })] : []);
+      meter.hidden = !all; meter.firstElementChild.style.width = all ? (100 * n / all) + "%" : "0"; parts = stepsPage();
+    } else {
+      const w = REPORTS[S.mode];
+      if (S.report) { lead(sentence(S.report.verdict), S.report.advice.replace(/^gotchu/, "GotchU"), [button("Run it again", "", () => go(S.mode))], S.report.level === "danger" ? "bad" : S.report.level);
+                      parts = [findings(S.report.findings, "Details", S.report.findings.length + " items")]; }
+      else { lead(S.problem ? "That did not finish" : w[1], S.problem || w[2], S.problem ? [button("Try again", "", () => go(S.mode))] : []); if (!S.problem) { meter.hidden = false; meter.classList.add("busy"); } }
+    }
+    body.replaceChildren(...parts); $("p-page").scrollTop = top;
+  }
+
+  async function refresh() {
+    try { S.st = await api("/api/status"); S.problem = ""; if (!query.get("theme")) setTheme(S.st.theme); } catch (e) { if (!S.st) S.problem = e.message; }
+    render();
+  }
+  async function loadLocks() {
+    try { S.locks = (await api("/api/locks", {})).locks; } catch (e) { S.locks = []; toast(e.message, false, true); }
+    render();
+  }
+
+  $("finish").addEventListener("click", () => act("/api/helpers", {}, UAC));
+  $("shortcut").addEventListener("click", () => act("/api/shortcut", { on: !S.st.shortcut }, "Changing the shortcuts."));
+  $("hello-skip").addEventListener("click", async () => { try { S.st = (await api("/api/prefs", { welcomed: true })).status; } catch (e) { S.st.welcomed = true; } render(); });
+  $("hello-go").addEventListener("click", async () => { const shortcut = $("hello-shortcut").checked;
+    try { S.st = (await api("/api/prefs", { welcomed: true })).status; } catch (e) { S.st.welcomed = true; }
+    render(); protectAll(shortcut); });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.theme) { setTheme(b.dataset.theme); if (S.st) S.st.theme = b.dataset.theme; api("/api/prefs", { theme: b.dataset.theme }).catch(() => {}); return; }
+    if (b.dataset.go) return go(b.dataset.go);
+    if (b.dataset.pick) return pick(b.dataset.pick === "folder");
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.mode !== "home") go("home"); });
+
+  /* ---------- the dial ---------- */
+  const cv = $("dial"), g = cv.getContext("2d"), still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const pts = [], N = 380;
+  for (let i = 0; i < N; i++) { const y = 1 - 2 * (i + .5) / N, r = Math.sqrt(1 - y * y), th = i * 2.399963; pts.push([Math.cos(th) * r, y, Math.sin(th) * r]); }
+  const RADII = [.66, .555, .45], AWAY = [.95, -1.35, 2.2], turn = [AWAY[0], AWAY[1], AWAY[2]], lit = [0, 0, 0];
+  let heat = 0, ready = 0;
+  const hourAngle = (date) => (date.getHours() + date.getMinutes() / 60) / 24 * Math.PI * 2 - Math.PI / 2;
+  const css = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+  function frame(now) {
+    const box = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1), size = Math.min(box.width, box.height);
+    if (S.mode === "home" && size > 40) {
+      if (cv.width !== Math.round(box.width * d) || cv.height !== Math.round(box.height * d)) { cv.width = Math.round(box.width * d); cv.height = Math.round(box.height * d); }
+      g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, box.width, box.height);
+      const C = { text: css("--text"), soft: css("--soft"), faint: css("--faint"), line: css("--line"), amber: css("--amber-text"), ok: css("--ok"), bad: css("--bad") };
+      const X = box.width / 2, Y = box.height / 2, R = size / 2 - 2, t = now / 1000, st = S.st, r = core(), caught = !!(st && st.tripwire.alert), k = still ? 1 : .08;
+      for (let i = 0; i < 3; i++) { turn[i] += ((r[i] === true ? 0 : AWAY[i]) - turn[i]) * k; lit[i] += ((r[i] === true ? 1 : 0) - lit[i]) * k; }
+      heat += ((caught ? 1 : 0) - heat) * k; ready += ((st ? 1 : 0) - ready) * k;
+      const arc = (rad, a0, a1, col, lw, dash) => { g.beginPath(); g.setLineDash(dash || []); g.arc(X, Y, rad * R, a0, a1); g.strokeStyle = col; g.lineWidth = lw; g.stroke(); g.setLineDash([]); };
+      const at = (rad, a) => [X + Math.cos(a) * rad * R, Y + Math.sin(a) * rad * R];
+
+      // the rim: a 24-hour clock
+      for (let i = 0; i < 96; i++) { const a = i / 96 * Math.PI * 2 - Math.PI / 2, major = i % 4 === 0, six = i % 24 === 0, p = at(1, a), q = at(six ? .9 : major ? .935 : .96, a);
+        g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.strokeStyle = six ? C.soft : major ? C.faint : C.line; g.lineWidth = six ? 1.6 : 1; g.stroke(); }
+      g.fillStyle = C.soft; g.font = "600 10.5px Barlow, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+      [["00", -Math.PI / 2], ["06", 0], ["12", Math.PI / 2], ["18", Math.PI]].forEach(([n, a]) => { const p = at(.83, a); g.fillText(n, p[0], p[1]); });
+      if (st) {                                                           // what happened in the last 24 hours, plotted at its time
+        const day = Date.now() - 864e5;
+        for (const m of st.marks) { const when = new Date(m.time); if (isNaN(when) || when < day) continue;
+          const p = at(.875, hourAngle(when)), alarm = m.kind === "alarm"; g.beginPath(); g.arc(p[0], p[1], alarm ? 3.2 : 2, 0, 7); g.fillStyle = alarm ? C.bad : C.faint; g.fill(); }
+        const n = at(1, hourAngle(new Date())), n2 = at(.9, hourAngle(new Date()));                  // now
+        g.beginPath(); g.moveTo(n[0], n[1]); g.lineTo(n2[0], n2[1]); g.strokeStyle = C.amber; g.lineWidth = 2; g.stroke();
+      }
+
+      // the optional ring: one segment per stricter Windows setting
+      const locks = strict() || [null, null, null, null];
+      locks.forEach((lock, i) => { const a0 = i / locks.length * Math.PI * 2 - Math.PI / 2 + .05, a1 = (i + 1) / locks.length * Math.PI * 2 - Math.PI / 2 - .05, on = lock && lock.on;
+        arc(.76, a0, a1, on ? C.soft : C.line, on ? 2.5 : 1.5, on ? null : [2, 4]); });
+
+      // the three tumblers: on = solid, turned so its notch sits at the top
+      for (let i = 0; i < 3; i++) {
+        const on = lit[i], hot = caught && i === 0, col = hot ? C.bad : on > .5 ? C.text : C.faint, lw = (on > .5 ? 3 : 2) + (S.hover === i ? 1.5 : 0);
+        g.globalAlpha = .35 + .65 * ready; arc(RADII[i], 0, Math.PI * 2, S.hover === i && !hot ? C.amber : col, lw, on > .5 ? null : [3, 5]); g.globalAlpha = 1;
+        const a = -Math.PI / 2 + turn[i], p = at(RADII[i], a);
+        g.beginPath(); g.arc(p[0], p[1], 4.5, 0, 7); g.fillStyle = css("--panel"); g.fill();
+        g.beginPath(); g.arc(p[0], p[1], 3.2, 0, 7);
+        if (on > .5) { g.fillStyle = hot ? C.bad : C.ok; g.fill(); } else { g.strokeStyle = r[i] === false ? C.amber : C.faint; g.lineWidth = 1.6; g.stroke(); }
+      }
+      if (lit[0] > .9 && lit[1] > .9 && lit[2] > .9 && !caught) {         // all three lined up
+        const p = at(.71, -Math.PI / 2), q = at(.4, -Math.PI / 2); g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.strokeStyle = C.ok; g.lineWidth = 1.2; g.setLineDash([2, 3]); g.stroke(); g.setLineDash([]);
+      }
+      if (heat > .05 && st.tripwire.alert) {                              // the alarm: from the time it happened, in to the ring that caught it
+        const a = hourAngle(new Date(st.tripwire.alert.time)), p = at(.875, a), q = at(RADII[0], a), pulse = still ? .5 : .5 + .5 * Math.sin(t * 4);
+        g.globalAlpha = heat; g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.strokeStyle = C.bad; g.lineWidth = 1.6; g.stroke();
+        g.beginPath(); g.arc(q[0], q[1], 5, 0, 7); g.fillStyle = C.bad; g.fill();
+        g.beginPath(); g.arc(q[0], q[1], 8 + 5 * pulse, 0, 7); g.strokeStyle = C.bad; g.lineWidth = 1.2; g.globalAlpha = heat * (1 - pulse * .7); g.stroke(); g.globalAlpha = 1;
+      }
+
+      // the middle: what you own, turning slowly
+      const ry = still ? .6 : t * .18, rx = .38, cy = Math.cos(ry), sy = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx), G = R * .3;
+      g.fillStyle = caught ? C.bad : C.text;
+      for (const q of pts) { const x1 = q[0] * cy + q[2] * sy, z1 = -q[0] * sy + q[2] * cy, y1 = q[1] * cx - z1 * sx, z2 = q[1] * sx + z1 * cx, near = 1 - (z2 + 1) / 2;
+        g.globalAlpha = (.12 + .7 * near) * (.4 + .6 * ready); const s = .9 + 1.1 * near; g.fillRect(X + x1 * G - s / 2, Y + y1 * G - s / 2, s, s); }
+      g.globalAlpha = 1;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- start ---------- */
+  setInterval(() => { api("/api/ping", {}).catch(() => {}); }, 20000);
+  setInterval(() => { if (!document.hidden && !S.busy && S.mode === "home") refresh(); }, 15000);
+  addEventListener("pagehide", () => { fetch("/api/bye", { method: "POST", keepalive: true, headers: { "X-GotchU-Token": token, "Content-Type": "application/json" }, body: "{}" }); });
+  render(); requestAnimationFrame(frame);
+  refresh().then(() => {
+    if (!S.st) return;
+    loadLocks();
+    if (query.get("check")) check(query.get("check"));
+    else if (query.get("view")) go(query.get("view"));
+  });
+})();
+</script>
+</body>
+</html>

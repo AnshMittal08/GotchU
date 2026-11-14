@@ -7,7 +7,7 @@ Thank you for helping. The project is small on purpose, so a few rules keep it t
 Windows 10 or 11 and Python 3.10 or newer. There is nothing to install.
 
     python -m unittest          # all tests
-    python -m gotchu ui         # the local window
+    python -m gotchu app        # the window
 
 The same checks run on every push and pull request (see `.github/workflows/ci.yml`): lint with ruff,
 tests on Python 3.10 to 3.13, a parse check of the PowerShell scripts, and a package install.

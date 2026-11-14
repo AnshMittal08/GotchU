@@ -11,7 +11,7 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import exposure, report
+from . import exposure, report, tripwire
 from .report import MEDIUM
 
 MESSENGER = {
@@ -114,5 +114,8 @@ LABELS = {"warn": ("DO THESE IN ORDER", "gotchu cannot tell what was actually ta
 def result(with_sites=False):
     items = exposure.collect()
     findings = [(MEDIUM, f"{n}. {title}", detail) for n, (title, detail) in enumerate(steps(items), 1)]
-    extra = {"sites": sites(items)} if with_sites else {}
+    extra = {}
+    if with_sites:
+        with tripwire.own_reads():
+            extra["sites"] = sites(items)
     return report.build("what to do after running something bad", findings, LABELS, **extra)

@@ -13,11 +13,12 @@ The short version is in the [README](../README.md). This page says exactly what 
 | `gotchu tripwire` | Plants decoy files (fake wallets and fake browser logins) no honest program opens. When one is read you get an alarm, and with `--cut` that program loses its internet. It also lists any program, other than the owner, that reads your browser, Telegram or Discord logins. Signed programs installed in Program Files, such as antivirus and backup tools, are listed rather than alarmed; an unsigned program reading your logins is put at the top of the report. It also tells you if its watcher has stopped. |
 | `gotchu vault` | Keeps key files encrypted with a passphrase, so a stolen copy is useless. `vault use` hands a key to one command and removes it afterwards. `vault passphrase` and `vault recovery` replace a forgotten passphrase or a lost recovery key. `vault backup` copies the vault, still encrypted, to another drive; `vault restore` brings it back. |
 | `gotchu setup` | Installs or updates the small scripts that run with administrator rights, in `C:\Program Files\gotchu`. Done for you the first time harden or the tripwire needs them; run it yourself after updating GotchU. `--remove` takes them away again. |
-| `gotchu ui` | A local window for check, scan, exposure and harden, and the tripwire's alarms and programs to review. |
+| `gotchu app` | Opens GotchU in its own window (Edge or Chrome, shown without tabs or an address bar). Home says whether you are protected and lists your protection with a switch for each: the theft alarm (the decoys), cutting the thief off from the internet, the right-click check, and the optional stricter Windows settings. A dial shows the same state, with a 24-hour rim that plots alarms and unusual reads, next to recent activity and the downloads worth checking. The first run shows a welcome with one button that turns the first three on. From the window you can also check a download and move it to the Recycle Bin, work through the checklist after a bad click, see what a thief could take, scan the PC, read the tripwire log, add or remove the Start-menu and desktop shortcuts, and switch between a light and a dark look. It closes its local server when the window closes. `gotchu app <file>` opens it on a check of that file; this is what "Check with GotchU" in the right-click menu runs. |
+| `gotchu ui` | The same window as a tab in your default browser. `--no-browser` only prints its address. |
 
 ## Examples
 
-    python -m gotchu ui
+    python -m gotchu app
     python -m gotchu exposure
     python -m gotchu tripwire --on
     python -m gotchu vault create

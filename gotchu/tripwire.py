@@ -11,10 +11,13 @@ alarm yet: first we measure how often honest programs do it.
 Limits, stated plainly: the alarm fires for decoys only; the internet block applies to the
 program that did the reading; malware that injects itself into the real browser looks like the owner.
 """
+import contextlib
 import hashlib
 import json
 import os
+import sys
 import time
+from datetime import datetime
 
 from . import admin, report
 from .report import HIGH, INFO, MEDIUM
@@ -22,6 +25,7 @@ from .report import HIGH, INFO, MEDIUM
 LOCAL = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "gotchu")
 STATE = os.path.join(LOCAL, "decoys.json")           # what gotchu planted, so it can remove exactly that
 INSTALLED = admin.INSTALLED                          # watcher, its settings and its logs: admin-only
+OWN = os.path.join(LOCAL, "own-reads.json")          # when gotchu itself counted saved logins
 DECOY_SIZE = 2048
 
 HEARTBEAT_SECONDS = 180                              # the watcher marks a file every 30 seconds while it runs
@@ -83,14 +87,49 @@ def guarded(env=None, secrets=None):
     return out
 
 
+@contextlib.contextmanager
+def own_reads(path=OWN):
+    """Wrap gotchu's own look at the real login stores (to count them), so that read is not then listed as a
+    program to review. Only reads by this same Python, inside the noted seconds, are set aside: a thief written
+    in Python and run at any other moment is still listed."""
+    start = time.time()
+    try:
+        yield
+    finally:
+        try:
+            with open(path, encoding="utf-8") as f:
+                spans = json.load(f)
+        except (OSError, ValueError):
+            spans = []
+        spans = (spans if isinstance(spans, list) else [])[-60:] + [[start - 2, time.time() + 2]]
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(spans, f)
+        except OSError:
+            pass
+
+
+def _is_own(sighting, spans):
+    program = os.path.normcase(sighting.get("program", ""))
+    homes = {os.path.normcase(os.path.dirname(p)) for p in (sys.executable, getattr(sys, "_base_executable", "")) if p}
+    if os.path.basename(program) not in ("python.exe", "pythonw.exe") or os.path.dirname(program) not in homes:
+        return False
+    try:
+        when = datetime.fromisoformat(sighting.get("time", "")).timestamp()
+    except ValueError:
+        return False
+    return any(a <= when <= b for a, b in spans)
+
+
 def load_state(path=STATE):
-    """What gotchu planted: decoy folders, decoy files and a fingerprint of each file."""
+    """What gotchu planted: decoy folders, decoy files, and when each file was written (its stamp)."""
     try:
         with open(path, encoding="utf-8") as f:
             saved = json.load(f)
     except (OSError, ValueError):
         saved = {}
-    return {"roots": saved.get("roots", []), "files": saved.get("files", []), "hashes": saved.get("hashes", {})}
+    return {"roots": saved.get("roots", []), "files": saved.get("files", []), "stamps": saved.get("stamps", {})}
 
 
 def _within(path, folder):
@@ -99,15 +138,17 @@ def _within(path, folder):
 
 
 def _ours(file, state):
-    """Is this still the decoy gotchu planted, unchanged? A wallet app installed since may have written over it."""
-    want = state["hashes"].get(file)
+    """Is this still the decoy gotchu planted, unchanged? A wallet app installed since may have written over it.
+
+    Judged from the file's size and the time it was last written, never by opening it: a decoy is watched
+    for reads, so gotchu opening its own decoy would raise its own alarm.
+    """
     try:
-        if want:
-            with open(file, "rb") as f:
-                return hashlib.sha256(f.read()).hexdigest() == want
-        return os.path.getsize(file) == DECOY_SIZE   # planted by a version that kept no fingerprint
+        st = os.stat(file)
     except OSError:
         return False
+    stamp = state.get("stamps", {}).get(file)    # absent for decoys planted by a version that kept no stamp
+    return st.st_size == DECOY_SIZE and (stamp is None or st.st_mtime_ns == stamp)
 
 
 def _foreign(folder, state):
@@ -148,8 +189,8 @@ def _clear(root, state):
     alone = _foreign(root, state) is None
     left = []
     for file in [f for f in state["files"] if _within(f, root) and os.path.exists(f)]:
-        # Without a fingerprint, the file is only deleted when nothing else has moved into its folder.
-        if not _ours(file, state) or (file not in state["hashes"] and not alone):
+        # Without a stamp, the file is only deleted when nothing else has moved into its folder.
+        if not _ours(file, state) or (file not in state.get("stamps", {}) and not alone):
             left.append(file)
             continue
         os.remove(file)
@@ -168,7 +209,7 @@ def _drop(state, root):
     state["roots"] = [r for r in state["roots"] if r != root]
     state["files"] = [f for f in state["files"] if f not in gone]
     for f in gone:
-        state["hashes"].pop(f, None)
+        state["stamps"].pop(f, None)
 
 
 def _plant(appdata=None, path=STATE):
@@ -184,6 +225,9 @@ def _plant(appdata=None, path=STATE):
             retired.append(root)
         if root in retired or not os.path.isdir(root):
             _drop(state, root)
+    for file in state["files"]:     # decoys from a version that kept no stamp: note it now, without opening them
+        if file not in state["stamps"] and _ours(file, state):
+            state["stamps"][file] = os.stat(file).st_mtime_ns
     for root, file in plan(appdata or os.environ["APPDATA"]):
         os.makedirs(os.path.dirname(file))
         data = os.urandom(DECOY_SIZE)   # meaningless bytes; there is no real wallet in it
@@ -191,7 +235,7 @@ def _plant(appdata=None, path=STATE):
             f.write(data)
         state["roots"].append(root)
         state["files"].append(file)
-        state["hashes"][file] = hashlib.sha256(data).hexdigest()
+        state["stamps"][file] = os.stat(file).st_mtime_ns
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(state, f)
@@ -260,6 +304,12 @@ def status():
                 out[kind] = [json.loads(line) for line in f if line.strip()][-keep:]
         except (OSError, ValueError):
             continue    # no file means nothing has happened yet
+    try:
+        with open(OWN, encoding="utf-8") as f:
+            spans = [s for s in json.load(f) if isinstance(s, list) and len(s) == 2]
+    except (OSError, ValueError):
+        spans = []
+    out["sightings"] = [s for s in out["sightings"] if not _is_own(s, spans)]
     return out
 
 

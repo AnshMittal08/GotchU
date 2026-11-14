@@ -172,14 +172,21 @@ def main(argv=None):
     p.add_argument("--sites", action="store_true", help="also list the websites with a password saved on this PC (names only)")
     p = sub.add_parser("setup", help="install or update gotchu's administrator helpers in Program Files")
     p.add_argument("--remove", action="store_true", help="remove them, once nothing gotchu turned on still needs them")
-    p = sub.add_parser("ui", help="open the gotchu window in your browser")
+    p = sub.add_parser("app", help="open GotchU in its own window")
+    p.add_argument("path", nargs="?", help="a download to check as soon as the window opens")
+    p.add_argument("--if-alarm", action="store_true", help="open only if an alarm is waiting for an answer (used at sign-in)")
+    p = sub.add_parser("ui", help="open the same window as a tab in your browser")
     p.add_argument("path", nargs="?", help="a download to check as soon as the window opens")
     p.add_argument("--no-browser", action="store_true", help="start without opening a browser")
     args = parser.parse_args(argv)
 
-    if args.command == "ui":
+    if args.command in ("app", "ui"):
         from . import ui
-        return ui.serve(open_browser=not args.no_browser, path=args.path)
+        if args.command == "app":
+            if args.if_alarm and not tripwire.status()["alerts"]:
+                return 0
+            return ui.serve(window="app", path=args.path)
+        return ui.serve(window=None if args.no_browser else "tab", path=args.path)
 
     if args.command == "vault":
         return _vault(args)
@@ -222,8 +229,12 @@ def _run(args):
         result = exposure.result()
     elif args.command == "respond":
         result = respond.result(with_sites=args.sites)
+    elif args.command == "scan":
+        from . import desktop
+        result = scan.result()
+        desktop.note_scan(result)
     else:
-        result = scan.result() if args.command == "scan" else harden.result()
+        result = harden.result()
     print(json.dumps(result, indent=2) if args.json else report.render(result))
     if args.command == "respond" and args.sites and not args.json:
         print(f"\nWebsites with a password saved on this PC ({len(result['sites'])}):\n" + "\n".join(result["sites"]))

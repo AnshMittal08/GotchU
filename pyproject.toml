@@ -32,7 +32,7 @@ gotchu = "gotchu.__main__:main"
 packages = ["gotchu"]
 
 [tool.setuptools.package-data]
-gotchu = ["*.ps1", "*.html", "*.json"]
+gotchu = ["*.ps1", "*.html", "*.json", "*.ico", "fonts/*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "gotchu.__version__" }

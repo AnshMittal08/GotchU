@@ -20,15 +20,25 @@ Status: early. It works on the author's Windows 11 Home PC; it has not been test
 You need Windows 10 or 11 and Python 3.10 or newer. Nothing else.
 
     pip install gotchu
-    gotchu ui
+    gotchu app
 
-`gotchu ui` opens a local window in your browser. Everything can also be done from the command line.
+`gotchu app` opens GotchU in its own window. The first time, it explains itself in three lines and
+offers one button, "Turn on protection", which can also add GotchU to the Start menu and the desktop.
+After that you open it like any other app and never need a terminal again.
 
-Have [uv](https://docs.astral.sh/uv/)? Then you can run it without installing: `uvx gotchu ui`
+Home says in plain words whether you are protected, shows it on a dial (one ring per protection, lining
+up like a safe's combination), and lists your protection with a switch for each:
+the theft alarm, cutting the thief off from the internet, the right-click check, and stricter Windows
+settings. From the window you can also check a download, see what to do after a bad click, and see
+what a thief could take. "Check with GotchU" appears in File Explorer's right-click menu (on Windows 11
+under "Show more options"). The window has a light and a dark look.
+
+Everything can still be done from the command line.
 
 **If Windows blocks the `gotchu` command.** With Smart App Control on, Windows may say "An Application
 Control policy has blocked this file", because the command pip makes is not signed. Use
-`python -m gotchu ui` instead. It does the same thing. A signed installer is planned.
+`python -m gotchu app` instead. It does the same thing, and the Start-menu shortcut is not affected.
+A signed installer is planned.
 
 ## What it does
 
@@ -43,7 +53,7 @@ Control policy has blocked this file", because the command pip makes is not sign
 | `gotchu vault` | Keeps key files encrypted with a passphrase, so a stolen copy is useless. |
 | `gotchu scan` | Am I infected right now? |
 | `gotchu respond` | I ran something bad. A checklist of what to do, in order. |
-| `gotchu ui` | One local window for all of the above. |
+| `gotchu app` | Opens GotchU in its own window, with all of the above. `gotchu ui` opens the same window as a browser tab. |
 | `gotchu setup` | Installs or removes the small helpers that need administrator rights. |
 
 Every command in detail: [docs/COMMANDS.md](https://github.com/AnshMittal08/GotchU/blob/main/docs/COMMANDS.md)

@@ -141,7 +141,12 @@ point to the right tool instead of pretending.
 ### Phase 3 - Usable by everyone
 - [x] Landing page (`site/index.html`): explains the problem with a scroll-driven 3D scene (three.js), what
       GotchU does, its limits, and how to get it. Not hosted anywhere yet.
-- [ ] Desktop app with a plain report, right-click "Check with gotchu", toast alerts.
+- [x] App window (`gotchu app`): a welcome with one button on the first run; Home says whether you are
+      protected, lists each protection with a switch, and shows an alarm waiting for an answer; light and
+      dark; Start-menu and desktop shortcuts; "Check with GotchU" in File Explorer's right-click menu;
+      pages for checking a download, the checklist after a bad click, what a thief could take, the scan and
+      the tripwire log; opens at sign-in when an alarm was not answered. No terminal after the first run.
+- [ ] Windows notifications with buttons (needs the installed app); a tray icon; automatic check of new downloads.
 - [x] Published on PyPI: `pip install gotchu`, or `uvx gotchu ui` without installing.
 - [ ] Single signed installer; winget and Microsoft Store listing; automatic signed updates.
 - [ ] Languages beyond English (Hindi first).
@@ -172,8 +177,9 @@ point to the right tool instead of pretending.
 
 ## Usage today
 
-    python -m gotchu ui                         # open the window
-    python -m gotchu ui <zip, folder or file>   # open the window and check that download
+    python -m gotchu app                        # open GotchU in its own window
+    python -m gotchu app <zip, folder or file>  # open it and check that download
+    python -m gotchu ui                         # the same window as a browser tab
     python -m gotchu check <zip, folder or file> [--json]
     python -m gotchu scan [--json]
     python -m gotchu exposure [--json]          # what a thief could take right now (counts only)

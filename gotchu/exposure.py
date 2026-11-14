@@ -78,7 +78,8 @@ def _item(kind, name, count, unit, where, owners=()):
             "owners": list(owners), "readable": can_read(where)}
 
 
-def _browser(entry, root, wallets):
+def _browser(entry, root, wallets, planted=()):
+    """planted: gotchu's own decoy files (lower-cased). They are never opened: a read would raise the alarm."""
     items = []
     if entry["engine"] == "firefox":
         profiles = [p.path for p in os.scandir(root) if p.is_dir()]
@@ -98,7 +99,8 @@ def _browser(entry, root, wallets):
             cookies, cookie_query = os.path.join(profile, "cookies.sqlite"), "SELECT COUNT(DISTINCT host) FROM moz_cookies"
         else:
             logins = os.path.join(profile, "Login Data")
-            saved = _count(logins, "SELECT COUNT(*) FROM logins") if os.path.isfile(logins) else None
+            mine = os.path.normcase(logins) in planted
+            saved = _count(logins, "SELECT COUNT(*) FROM logins") if os.path.isfile(logins) and not mine else None
             cookies = os.path.join(profile, "Network", "Cookies")
             cookie_query = "SELECT COUNT(DISTINCT host_key) FROM cookies"
             for ext_id, wallet in wallets.items():
@@ -147,11 +149,19 @@ def collect(env=None, secrets=None, decoys=None):
     env = os.environ if env is None else env
     secrets = secrets or load_map()
     decoys = tripwire.load_state() if decoys is None else decoys
+    if env is os.environ:       # the real PC: note the moment, so this read is not listed as a program to review
+        with tripwire.own_reads():
+            return _collect(env, secrets, decoys)
+    return _collect(env, secrets, decoys)
+
+
+def _collect(env, secrets, decoys):
     items = []
+    planted = {os.path.normcase(f) for f in decoys["files"]}
     for entry in secrets["browsers"]:
         root = expand(entry["root"], env)
         if os.path.isdir(root):
-            items += _browser(entry, root, secrets.get("wallet_extensions", {}))
+            items += _browser(entry, root, secrets.get("wallet_extensions", {}), planted)
     for store in secrets["stores"]:
         path = expand(store["path"], env)
         # gotchu's own decoys are not real wallets - but a real wallet installed into a decoy folder since is.

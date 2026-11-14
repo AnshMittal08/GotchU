@@ -2,6 +2,8 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
+from urllib.parse import unquote, urlsplit
 
 from gotchu import report, tripwire
 from tests.test_exposure import fake_profile
@@ -123,6 +125,30 @@ class DecoyTests(unittest.TestCase):
         write(self.real, b"real wallet")
         self.assertFalse(tripwire.only_decoys(wallet, self.state))
         self.assertFalse(tripwire.only_decoys(self.appdata, {"roots": [], "files": [], "hashes": {}}))
+
+    def test_gotchu_never_opens_its_own_decoys(self):
+        # A decoy is watched for reads, so gotchu opening one would raise its own alarm.
+        from gotchu import exposure
+        decoys = {os.path.normcase(f) for f in self.state["files"]}
+        opened = []
+        real_open, real_connect = open, exposure.sqlite3.connect
+
+        def spy_open(file, *args, **kwargs):
+            opened.append(os.path.normcase(str(file)))
+            return real_open(file, *args, **kwargs)
+
+        def spy_connect(target, *args, **kwargs):
+            opened.append(os.path.normcase(unquote(urlsplit(target).path).lstrip("/")))
+            return real_connect(target, *args, **kwargs)
+
+        home = os.path.dirname(self.appdata)
+        env = {"APPDATA": self.appdata, "LOCALAPPDATA": os.path.join(home, "Local"), "USERPROFILE": home}
+        with mock.patch("builtins.open", spy_open), mock.patch.object(exposure.sqlite3, "connect", spy_connect):
+            tripwire.moved_in(self.state)
+            for file in self.state["files"]:
+                self.assertTrue(tripwire.only_decoys(file, self.state))
+            exposure.collect(env, decoys=self.state)
+        self.assertEqual(decoys & set(opened), set())
 
 
 if __name__ == "__main__":

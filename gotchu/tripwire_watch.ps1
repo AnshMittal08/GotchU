@@ -52,12 +52,9 @@ function Get-AlarmText([string]$proc, [bool]$cut) {
     $text += "Time: $((Get-Date).ToString('HH:mm'))`n`n"
     $text += if ($cut) { "What GotchU did: blocked this program from the internet, and recorded the alarm.`n`n" }
              else { "What GotchU did: recorded the alarm. Nothing was blocked.`n`n" }
-    $text += "If you do not recognise this program:`n" +
-             "1. Disconnect from the internet.`n" +
-             "2. Run: gotchu scan`n" +
-             "3. Run: gotchu respond (it lists what to do, in order)`n`n" +
-             "If you do recognise it, for example a wallet app or browser you have just installed, this is " +
-             "probably a false alarm. Run: gotchu tripwire --restore, then: gotchu tripwire --on"
+    $text += "Open GotchU from the Start menu to answer this alarm. It asks whether you recognise the program, " +
+             "and shows what to do next if you do not.`n`n" +
+             "No Start-menu entry? In a terminal, run: gotchu app"
     return $text
 }
 

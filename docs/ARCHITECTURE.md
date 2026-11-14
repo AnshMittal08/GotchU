@@ -11,7 +11,7 @@ flowchart TB
 
     subgraph entry["Ways in"]
         cli["Command line<br/>gotchu ..."]
-        ui["Local window<br/>gotchu ui"]
+        ui["The window<br/>gotchu app"]
     end
 
     subgraph core["GotchU, running as you (no special rights)"]
@@ -109,9 +109,9 @@ flowchart LR
 ```mermaid
 sequenceDiagram
     participant U as You
-    participant G as gotchu ui
+    participant G as gotchu app
     participant B as Your browser
-    U->>G: gotchu ui
+    U->>G: gotchu app
     G->>G: listen on 127.0.0.1, random port, make a one-time token
     G->>B: open the page, with the token after the hash sign in the address
     B->>G: GET / (the page itself)

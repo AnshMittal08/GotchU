@@ -58,6 +58,17 @@ class CliTests(unittest.TestCase):
             run(["scan"])
         self.assertEqual(started.call_args.args[0][0], report.POWERSHELL)
 
+    def test_the_window_remembers_small_things_and_survives_a_damaged_file(self):
+        from gotchu import desktop
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "gotchu", "app.json")
+            desktop.save_state(path, skipped=["asr"])
+            desktop.save_state(path, done=["step"])
+            self.assertEqual(desktop.load_state(path), {"skipped": ["asr"], "done": ["step"]})
+            with open(path, "w") as f:
+                f.write("{not json")
+            self.assertEqual(desktop.load_state(path), {})
+
 
 if __name__ == "__main__":
     unittest.main()
