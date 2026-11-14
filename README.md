@@ -65,6 +65,8 @@ To help, see [CONTRIBUTING.md](CONTRIBUTING.md). To report a weakness, see [SECU
 
 ## How it works
 
+- [site/index.html](site/index.html): the landing page. One file; open it in a browser. Scrolling plays a
+  theft twice in 3D, once unguarded and once with GotchU.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the parts, what runs with which rights, and how the tripwire,
   locks and vault work, as diagrams.
 - [docs/USER_FLOWS.md](docs/USER_FLOWS.md): who it is for and the journeys it is designed around.
