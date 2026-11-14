@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GotchU: guard the safe, not just the door</title>
+<meta name="description" content="A free Windows tool against password-stealing malware. It shows what a thief could take, plants decoys that raise an alarm, and makes stolen key files useless.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Road signage, the same language as the app: sign colours carry meaning (red stop, yellow caution,
+     green clear, blue information) and the lettering is a highway face. The page starts at night,
+     trips to caution yellow when the thief touches a decoy, and ends in daylight. */
+  :root {
+    --night: #080D17;
+    --paper: #EEF1F5;
+    --ink: #0B0F16;
+    --caution: #F5B700;
+    --stop: #E2332C;
+    --clear: #1F8A4C;
+    --info: #0F5EA8;
+    --page: var(--night);
+    --text: #EAF0FA;
+    --soft: #9AA8BF;
+    --gutter: clamp(1.25rem, 5vw, 4.5rem);
+    --display: "Barlow Condensed", Bahnschrift, "DIN Alternate", "Arial Narrow", sans-serif;
+    --body: "Barlow", Bahnschrift, "Segoe UI", system-ui, sans-serif;
+    --swift: cubic-bezier(.2, .8, .2, 1);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--page); color: var(--text); overflow-x: hidden;
+    font: 400 1.125rem/1.55 var(--body); -webkit-font-smoothing: antialiased;
+    transition: background-color .22s ease-out, color .22s ease-out;
+  }
+  body.tripped { --page: var(--caution); --text: var(--ink); --soft: #4A3C00; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--caution); outline-offset: 3px; border-radius: 3px; }
+  body.tripped :focus-visible, .sheet :focus-visible { outline-color: var(--info); }
+  h1, h2, h3, p { margin: 0; }
+  h1, h2, h3 { font-family: var(--display); line-height: .94; text-wrap: balance; }
+
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+  /* Fine grain over everything, so the flat colours read as a printed surface and not a screen fill. */
+  .grain {
+    position: fixed; inset: 0; z-index: 30; pointer-events: none; opacity: .09; mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* The bar is two dark plates, like the backing of a sign, so it reads the same over night, yellow, paper and blue. */
+  .bar {
+    position: fixed; z-index: 40; top: 0; left: 0; right: 0; pointer-events: none; color: #EAF0FA;
+    display: flex; align-items: center; justify-content: space-between; padding: .9rem var(--gutter);
+  }
+  .mark, .bar nav {
+    pointer-events: auto; border-radius: 999px; background: rgba(8, 13, 23, .84); box-shadow: inset 0 0 0 1px rgba(234, 240, 250, .14);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  }
+  .mark { font: 800 1.55rem/1 var(--display); letter-spacing: .01em; text-decoration: none; padding: .5rem 1.05rem .56rem; }
+  .bar nav { display: flex; align-items: center; gap: .15rem; padding: .32rem; font-size: .98rem; font-weight: 500; }
+  .bar nav a { text-decoration: none; padding: .42rem .9rem; border-radius: 999px; transition: background-color .2s; }
+  .bar nav a:hover { background: rgba(234, 240, 250, .12); }
+  .bar nav a.cta, .bar nav a.cta:hover { background: var(--caution); color: var(--ink); font-weight: 600; }
+
+  main, footer { position: relative; z-index: 1; }
+
+  /* ---------- The story: one pinned stage, scrolled through ---------- */
+  .cap { max-width: 34rem; padding: 12vh var(--gutter); display: grid; gap: 1.25rem; }
+  .cap h2 { font-size: clamp(2.4rem, min(4.3vw, 9.4vh), 4.4rem); font-weight: 800; }
+  .cap h2 span { display: block; }
+  .cap p { font-size: 1.2rem; max-width: 30rem; }
+  .cap .quiet { font-size: 1rem; color: var(--soft); }
+  .kicker { font: 600 .92rem/1.2 var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--caution); }
+  .tripped .kicker { color: var(--ink); }
+  .hero h1 { font-size: clamp(2.7rem, min(7vw, 15vh), 7.6rem); font-weight: 800; letter-spacing: -.005em; text-wrap: nowrap; }
+  .hero h1 .line { display: block; overflow: hidden; padding-bottom: .06em; }
+  .hero h1 .line > span { display: block; }
+  .hero h1 .them { color: #66738C; }
+  .hero p { color: var(--soft); font-size: 1.25rem; max-width: 31rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .9rem; margin-top: .3rem; }
+  .button {
+    display: inline-flex; align-items: center; gap: .6rem; padding: .85rem 1.4rem; border-radius: 8px; cursor: pointer;
+    border: 2px solid currentColor; background: none; color: inherit; font: 600 1.05rem/1.2 var(--body); text-decoration: none;
+    transition: transform .2s var(--swift), background-color .2s, color .2s;
+  }
+  .button:hover { transform: translateY(-2px); }
+  .button.go { background: var(--caution); border-color: var(--caution); color: var(--ink); }
+  .cue { display: none; }
+  .figures { display: flex; gap: 2.5rem; margin: .2rem 0; }
+  .figures b { display: block; white-space: nowrap; font: 800 clamp(2.1rem, min(4.4vw, 7.4vh), 3.8rem)/.95 var(--display); color: var(--stop); font-variant-numeric: tabular-nums; }
+  .figures span { font-size: 1rem; color: var(--soft); }
+  .cap .shout { font-size: clamp(5.5rem, 15vw, 13.5rem); line-height: .8; letter-spacing: -.01em; }
+  .tags, .alarm, .rail { display: none; }
+
+  .live .story { height: 940vh; }
+  .live .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+  .live .stage::before {   /* a pool of light behind the object, so it sits in space instead of on a flat fill */
+    content: ""; position: absolute; inset: 0; pointer-events: none; transition: opacity .25s;
+    background: radial-gradient(60vmax 46vmax at 72% 46%, rgba(46, 92, 190, .30), transparent 68%);
+  }
+  .tripped .stage::before { opacity: 0; }
+  .live .cap {
+    position: absolute; left: 0; top: 50%; translate: 0 -50%; padding: 0 0 0 var(--gutter); width: min(42rem, 46vw); max-width: none;
+    opacity: 0; will-change: opacity, transform;
+  }
+  .live .cap.hero { top: auto; bottom: clamp(2.8rem, 9vh, 5.5rem); translate: none; width: min(46rem, 52vw); }
+  .live .cue {
+    display: flex; align-items: center; gap: .8rem; position: absolute; right: var(--gutter); bottom: clamp(2.8rem, 9vh, 5.5rem);
+    font-size: .95rem; color: var(--soft); will-change: opacity;
+  }
+  .live .cue i { width: 1px; height: 3.2rem; background: currentColor; transform-origin: top; animation: drip 2.2s var(--swift) infinite; }
+  @keyframes drip { 0% { transform: scaleY(0); } 55% { transform: scaleY(1); } 100% { transform: scaleY(1); opacity: 0; } }
+
+  /* Names pinned to the things in the scene. */
+  .live .tags { display: block; position: absolute; inset: 0; pointer-events: none; }
+  .tag {
+    position: absolute; left: 0; top: 0; white-space: nowrap; opacity: 0; will-change: transform, opacity;
+    font: 600 1rem/1.2 var(--body); color: var(--text); text-align: center; transition: color .2s;
+  }
+  .tag small { display: block; margin-top: .3rem; font: 400 .78rem/1.2 Consolas, "Cascadia Mono", monospace; color: var(--soft); }
+  .tag.taken { color: var(--stop); }
+  .tripped .tag.taken { color: #9C1318; }
+  .tag.decoy, .tag.file { font-weight: 600; color: var(--caution); }
+  .tag.file { color: var(--stop); }
+  .tripped .tag.decoy { color: var(--ink); }
+  .tag.blocked small { font: 600 .85rem/1.2 var(--body); color: var(--ink); }
+
+  /* The warning window GotchU really shows, drawn to scale of importance: it is the product's whole point. */
+  .live .alarm {
+    display: block; position: absolute; right: var(--gutter); bottom: clamp(2.5rem, 8vh, 5rem); width: min(24rem, 30vw);
+    background: #fff; color: var(--ink); border-radius: 10px; box-shadow: 0 0 0 2px var(--ink), 10px 10px 0 var(--ink);
+    opacity: 0; transform: translateY(18px) scale(.96); transition: opacity .2s, transform .35s var(--swift);
+  }
+  .alarm.show { opacity: 1; transform: none; }
+  .alarm header { display: flex; align-items: center; gap: .6rem; padding: .6rem .9rem; border-bottom: 2px solid var(--ink); font: 700 1.15rem/1 var(--display); }
+  .alarm header svg { width: 1.3rem; height: 1.3rem; }
+  .alarm div { padding: .9rem; font-size: .98rem; line-height: 1.45; display: grid; gap: .55rem; }
+  .alarm code { font: 500 .88rem Consolas, monospace; word-break: break-all; }
+
+  .live .rail {
+    display: grid; gap: .7rem; position: absolute; right: calc(var(--gutter) * .45); top: 50%; translate: 0 -50%;
+    margin: 0; padding: 0; list-style: none;
+  }
+  .rail li { width: 3px; height: 1.5rem; background: var(--text); opacity: .22; transition: opacity .2s, height .3s var(--swift); }
+  .rail li.on { opacity: 1; height: 2.6rem; }
+
+  .live:not(.still) .hero h1 .line > span { transform: translateY(105%); animation: rise 1s var(--swift) .15s forwards; }
+  .live:not(.still) .hero h1 .line:nth-child(2) > span { animation-delay: .24s; }
+  .live:not(.still) .hero h1 .line:nth-child(3) > span { animation-delay: .42s; }
+  .live:not(.still) .hero h1 .line:nth-child(4) > span { animation-delay: .51s; }
+  .live:not(.still) .hero p, .live:not(.still) .hero .actions, .live:not(.still) .hero .kicker { opacity: 0; animation: fade .8s ease .8s forwards; }
+  @keyframes rise { to { transform: none; } }
+  @keyframes fade { to { opacity: 1; } }
+
+  /* ---------- Daylight: the sheets that slide over the story ---------- */
+  .sheet { background: var(--paper); color: var(--ink); padding: clamp(4.5rem, 12vh, 9rem) var(--gutter); }
+  .sheet.first { border-radius: 28px 28px 0 0; margin-top: -28px; }
+  .wrap { max-width: 76rem; margin: 0 auto; }
+  .sheet h2 { font-size: clamp(2.6rem, 5.6vw, 5rem); font-weight: 800; }
+
+  .asks { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 7vw, 7rem); }
+  .asks span { display: block; font-size: 1.15rem; font-weight: 500; margin-bottom: .9rem; }
+  .asks p { font: 800 clamp(2.6rem, 6vw, 5.6rem)/.92 var(--display); max-width: 8.5em; text-wrap: balance; }
+  .asks .them { color: #98A1B1; }
+  .live:not(.still) .asks .us p { clip-path: inset(-5% 100% -15% 0); transition: clip-path 1s var(--swift) .2s; }
+  .live:not(.still) .asks.seen .us p { clip-path: inset(-5% -5% -15% 0); }
+  .because { margin-top: clamp(2.5rem, 7vh, 5rem); font-size: 1.35rem; line-height: 1.45; max-width: 41rem; }
+
+  .console { padding-top: 0; }
+  .console h2 { margin-bottom: 1rem; }
+  .console .lead { font-size: 1.25rem; max-width: 36rem; margin-bottom: 2.6rem; }
+  .bench { display: grid; grid-template-columns: minmax(17rem, 25rem) minmax(0, 1fr); gap: clamp(1.5rem, 4vw, 3.5rem); align-items: start; }
+  .asklist { display: grid; gap: .35rem; }
+  .asklist button {
+    display: grid; grid-template-columns: 2.4rem 1fr; column-gap: .9rem; align-items: center; text-align: left; cursor: pointer;
+    padding: .8rem .9rem; border: 0; border-radius: 10px; background: none; color: #5B6577; font: inherit;
+    transition: background-color .2s, color .2s;
+  }
+  .asklist svg { width: 2.4rem; height: 2.4rem; grid-row: span 2; filter: grayscale(1) opacity(.55); transition: filter .2s; }
+  .asklist b { font: 700 1.5rem/1.05 var(--display); }
+  .asklist code { font: 500 .92rem var(--body); }
+  .asklist button:hover { color: var(--ink); }
+  .asklist button[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 0 #D5DAE2; }
+  .asklist button[aria-selected="true"] svg, .asklist button:hover svg { filter: none; }
+
+  .window { background: var(--night); color: #EAF0FA; border-radius: 16px; overflow: hidden; min-height: 27rem; box-shadow: 0 30px 60px -30px rgba(8, 13, 23, .55); }
+  .window .typed { padding: 1rem 1.3rem; border-bottom: 1px solid #1C2638; font: 500 .98rem/1.5 Consolas, "Cascadia Mono", monospace; color: #9AA8BF; min-height: 3.5rem; }
+  .window .typed b { color: #EAF0FA; font-weight: 500; }
+  .window .typed b::after { content: ""; display: inline-block; width: .55em; height: 1.05em; margin-left: 2px; vertical-align: -.18em; background: var(--caution); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .window .out { padding: 1.3rem; display: grid; gap: 1rem; opacity: 0; transform: translateY(8px); transition: opacity .3s, transform .4s var(--swift); }
+  .window .out.in { opacity: 1; transform: none; }
+  .sign { display: grid; grid-template-columns: 3.3rem 1fr; gap: 1rem; align-items: center; padding: 1.15rem 1.25rem; border-radius: 12px; }
+  .sign svg { width: 3.3rem; height: 3.3rem; }
+  .sign strong { display: block; font: 800 clamp(1.5rem, 2.5vw, 2.1rem)/.98 var(--display); text-transform: uppercase; }
+  .sign span { display: block; margin-top: .4rem; font-size: .98rem; line-height: 1.4; }
+  .sign.warn { background: var(--caution); color: var(--ink); box-shadow: inset 0 0 0 3px var(--caution), inset 0 0 0 5px var(--ink); }
+  .sign.danger { background: var(--stop); color: #fff; box-shadow: inset 0 0 0 3px var(--stop), inset 0 0 0 5px #fff; }
+  .sign.ok { background: var(--clear); color: #fff; box-shadow: inset 0 0 0 3px var(--clear), inset 0 0 0 5px #fff; }
+  .rows { margin: 0; padding: 0; list-style: none; display: grid; gap: .8rem; }
+  .rows li { display: grid; grid-template-columns: 1.5rem 1fr; gap: .8rem; font-size: .98rem; line-height: 1.4; }
+  .rows svg { width: 1.5rem; height: 1.5rem; margin-top: .1rem; }
+  .rows b { display: block; font-weight: 600; }
+  .rows span { color: #9AA8BF; }
+  .plainlines { margin: 0; font: 500 .95rem/1.75 Consolas, "Cascadia Mono", monospace; color: #C6D0E2; white-space: pre-wrap; }
+  .plainlines i { font-style: normal; color: #6E7B92; }
+  .note { margin-top: 1rem; font-size: .95rem; color: #5B6577; }
+
+  .promises { margin-top: clamp(3.5rem, 9vh, 6rem); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.5rem, 4vw, 3.5rem); border-top: 2px solid var(--ink); padding-top: 2rem; }
+  .promises h3 { font-size: 1.9rem; font-weight: 700; margin-bottom: .5rem; }
+  .promises p { font-size: 1.05rem; }
+
+  /* Information signs are blue. The limits are information, stated as plainly as the promises. */
+  .limits { padding-top: 0; border-radius: 0 0 28px 28px; }
+  .limits .board { background: var(--info); color: #fff; border-radius: 22px; padding: clamp(2.2rem, 6vw, 5rem); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: clamp(2rem, 6vw, 5rem); box-shadow: inset 0 0 0 4px var(--info), inset 0 0 0 7px #fff; }
+  .limits p { margin-top: 1.2rem; font-size: 1.25rem; max-width: 22rem; }
+  .limits ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 1.4rem; font-size: 1.15rem; }
+  .limits li { padding-left: 1.6rem; position: relative; }
+  .limits li::before { content: ""; position: absolute; left: 0; top: .55em; width: .7rem; height: .7rem; background: #fff; }
+
+  /* ---------- Night again: the particles gather into the name ---------- */
+  .get { min-height: 100vh; display: flex; flex-direction: column; justify-content: flex-end; padding: 56vh var(--gutter) 0; color: #EAF0FA; background: var(--night); }
+  .live .get { background: none; }
+  .get .inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(2rem, 6vw, 5rem); align-items: end; padding-bottom: 3rem; }
+  .get h2 { font-size: clamp(2.4rem, min(5vw, 8.5vh), 4.6rem); font-weight: 800; }
+  .get p { margin-top: 1rem; color: #9AA8BF; max-width: 27rem; }
+  .install { position: relative; }
+  .install pre { margin: 0 0 1.2rem; padding: 1.2rem 1.4rem; background: rgba(4, 7, 13, .82); border: 1px solid #1C2638; border-radius: 12px; overflow-x: auto; font: 500 1rem/1.75 Consolas, "Cascadia Mono", monospace; }
+  .install .copy { position: absolute; top: .7rem; right: .7rem; padding: .35rem .75rem; border-width: 1px; font-size: .88rem; border-radius: 6px; background: var(--night); }
+  footer { color: #7F8CA3; font-size: .98rem; padding: 1.4rem var(--gutter) 2.2rem; border-top: 1px solid #1C2638; display: flex; flex-wrap: wrap; gap: .5rem 2rem; justify-content: space-between; background: var(--night); }
+  .live footer { background: none; }
+
+  @media (max-width: 860px) {
+    .bar nav a.extra { display: none; }
+    .live .cap, .live .cap.hero { top: auto; bottom: 1.6rem; translate: none; width: 100%; padding: 0 var(--gutter); }
+    .live .stage::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46%; pointer-events: none; background: linear-gradient(transparent, var(--page) 30%); transition: background .22s; }
+    .hero h1 { font-size: clamp(2.1rem, 11.3vw, 4.6rem); }
+    .cap { gap: .8rem; }
+    .cap h2 { font-size: clamp(2rem, 9.4vw, 3.4rem); }
+    .cap p { font-size: 1.05rem; }
+    .cap .quiet { font-size: .9rem; }
+    .figures { gap: 1.5rem; }
+    .live .cap { z-index: 1; }
+    .live .stage::before { background: radial-gradient(90vmax 60vmax at 50% 26%, rgba(46, 92, 190, .30), transparent 68%); }
+    .live .cue, .live .alarm, .live .rail { display: none; }
+    .cap .shout { font-size: clamp(5rem, 27vw, 9rem); }
+    .tag { font-size: .8rem; }
+    .tag small { display: none; }
+    .asks, .bench, .promises, .limits .board, .get .inner { grid-template-columns: minmax(0, 1fr); }
+    .get { padding-top: 46vh; }
+  }
+  .still *, .still *::before, .still *::after { animation: none !important; transition: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .live .hero h1 .line > span { transform: none; }
+    .live .hero p, .live .hero .actions, .live .hero .kicker { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="s-stop" viewBox="0 0 24 24"><path d="M7.9 1.5h8.2l6.4 6.4v8.2l-6.4 6.4H7.9l-6.4-6.4V7.9z" fill="#E2332C"/><path d="M12 6.6v7M12 16.6v.9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="s-warn" viewBox="0 0 24 24"><path d="M12 2.4l10.4 18.6H1.6z" fill="#F5B700" stroke="#0B0F16" stroke-width="1.3" stroke-linejoin="round"/><path d="M12 9v5.6M12 17.2v.8" stroke="#0B0F16" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="s-act" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="#0F5EA8"/><path d="M7 12.4l3.4 3.4L17 9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="s-ok" viewBox="0 0 24 24"><rect x="1.5" y="1.5" width="21" height="21" rx="3.5" fill="#1F8A4C"/><path d="M7 12.4l3.4 3.4L17 9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="s-warn-ink" viewBox="0 0 24 24"><path d="M12 2.4l10.4 18.6H1.6z" fill="#0B0F16"/><path d="M12 9v5.6M12 17.2v.8" stroke="#F5B700" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="s-stop-white" viewBox="0 0 24 24"><path d="M7.9 1.5h8.2l6.4 6.4v8.2l-6.4 6.4H7.9l-6.4-6.4V7.9z" fill="#fff"/><path d="M12 6.6v7M12 16.6v.9" stroke="#E2332C" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="s-ok-white" viewBox="0 0 24 24"><rect x="1.5" y="1.5" width="21" height="21" rx="3.5" fill="#fff"/><path d="M7 12.4l3.4 3.4L17 9" fill="none" stroke="#1F8A4C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="s-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5" fill="#33415A"/><path d="M12 11v6M12 7v.8" stroke="#EAF0FA" stroke-width="2.2" stroke-linecap="round"/></symbol>
+</svg>
+
+<header class="bar">
+  <a class="mark" href="#top">GotchU</a>
+  <nav aria-label="Sections">
+    <a class="extra" href="#story">A theft, slowed down</a>
+    <a class="extra" href="#does">What it does</a>
+    <a class="extra" href="#limits">Limits</a>
+    <a class="cta" href="#get">Get it</a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="story" id="story">
+    <div class="stage">
+      <article class="cap hero" data-from="-1" data-to="0.085">
+        <span class="kicker">For when antivirus is too late</span>
+        <h1><span class="line them"><span>One wrong click.</span></span><span class="line"><span>We GotchU.</span></span></h1>
+        <p>It happens to careful people too. New malware is built so that antivirus doesn't recognise it yet, and it needs about a minute to copy your saved passwords and logins. GotchU is a free Windows tool built for that minute.</p>
+        <div class="actions">
+          <a class="button go" href="#get">Get GotchU</a>
+          <a class="button" href="#does">See what it does</a>
+        </div>
+      </article>
+      <p class="cue" aria-hidden="true">Scroll. Watch what happens next <i></i></p>
+
+      <article class="cap" data-from="0.10" data-to="0.215">
+        <span class="kicker">Second zero</span>
+        <h2>You open a file.</h2>
+        <p>A free game. A cracked app. A "paste this to fix it" page. Nothing seems to happen, so you get on with your day.</p>
+      </article>
+      <article class="cap" data-from="0.235" data-to="0.375">
+        <span class="kicker">A few seconds in</span>
+        <h2><span>It doesn't break in.</span> <span>It helps itself.</span></h2>
+        <p>Your passwords and logins sit in ordinary files. Any program you run can open them, and a thief knows where to look, because they are in the same place on every PC.</p>
+      </article>
+      <article class="cap" data-from="0.39" data-to="0.495">
+        <span class="kicker">About a minute in</span>
+        <h2>It leaves with a copy of everything.</h2>
+        <div class="figures">
+          <div><b data-count="7.4" data-unit=" million">7.4 million</b><span>PCs hit in six months</span></div>
+          <div><b data-count="1.7" data-unit=" billion">1.7 billion</b><span>logins stolen from them</span></div>
+        </div>
+        <p>Deleting it now un-steals nothing. Your logins still work, on someone else's computer.</p>
+        <p class="quiet">Figures for January to June 2026: <a href="https://infosecurity-magazine.com/news/infostealers-17-billion">Flashpoint, via Infosecurity Magazine</a>.</p>
+      </article>
+      <article class="cap" data-from="0.51" data-to="0.662">
+        <span class="kicker">Rewind</span>
+        <h2><span>Same click.</span> <span>This time, we GotchU.</span></h2>
+        <p>Before any of this, GotchU hid a few fakes among your real files. They look like crypto wallets, and no honest program has a reason to open them.</p>
+      </article>
+      <article class="cap" data-from="0.668" data-to="0.825">
+        <span class="kicker">A few seconds in, this time</span>
+        <h2 class="shout">Gotcha.</h2>
+        <p>The thief grabbed a fake. That instant, a warning names the program that did it. With the cut switched on, it loses its internet before it can send anything home.</p>
+      </article>
+      <article class="cap" data-from="0.84" data-to="2">
+        <span class="kicker">The race</span>
+        <h2><span>It needs a minute.</span> <span>We need half a second.</span></h2>
+        <p>That is how fast the alarm went off on the laptop GotchU was built on: under half a second. We are built to win that race early, and to tell you plainly when we can't.</p>
+      </article>
+
+      <div class="tags" aria-hidden="true">
+        <span class="tag store">Saved passwords<small>...\Default\Login Data</small></span>
+        <span class="tag store">Sites you're signed in to<small>...\Default\Network\Cookies</small></span>
+        <span class="tag store">Telegram and Discord<small>Telegram Desktop\tdata</small></span>
+        <span class="tag store">Server keys<small>.ssh\id_ed25519</small></span>
+        <span class="tag store">Cloud accounts<small>.aws\credentials</small></span>
+        <span class="tag store">Crypto wallets<small>Exodus\exodus.wallet</small></span>
+        <span class="tag decoy">decoy</span>
+        <span class="tag decoy">decoy</span>
+        <span class="tag decoy">decoy</span>
+        <span class="tag file">free-game-setup.exe</span>
+      </div>
+
+      <aside class="alarm" aria-hidden="true">
+        <header><svg><use href="#s-warn"/></svg>GotchU alarm</header>
+        <div>
+          <span>A program just opened a decoy wallet file that no honest program touches.</span>
+          <code>C:\Users\you\Downloads\free-game-setup.exe</code>
+          <span>GotchU has blocked this program from the internet.</span>
+        </div>
+      </aside>
+
+      <ol class="rail" aria-hidden="true"><li></li><li></li><li></li><li></li><li></li><li></li></ol>
+    </div>
+  </section>
+
+  <section class="sheet first" id="why">
+    <div class="wrap">
+      <div class="asks">
+        <div class="them"><span>Antivirus asks</span><p>Have I seen this file before?</p></div>
+        <div class="us"><span>GotchU asks</span><p>Who just touched your passwords?</p></div>
+      </div>
+      <p class="because">New malware is made to look like nothing antivirus has seen, so the answer to the first question often comes too late. The second question doesn't care how new the malware is. What a thief wants is a short list, kept in the same few places on every PC, and a short list can be watched. Keep your antivirus at the door. GotchU guards the safe.</p>
+    </div>
+  </section>
+
+  <section class="sheet console" id="does">
+    <div class="wrap">
+      <h2>Six worries. Six straight answers.</h2>
+      <p class="lead">Pick the one on your mind. This is what GotchU tells you.</p>
+      <div class="bench">
+        <div class="asklist" role="tablist" aria-label="What GotchU does" aria-orientation="vertical">
+          <button role="tab" data-k="check"><svg><use href="#s-stop"/></svg><b>I downloaded something. Is it safe to open?</b><code>gotchu check</code></button>
+          <button role="tab" data-k="scan"><svg><use href="#s-warn"/></svg><b>Did something already get in?</b><code>gotchu scan</code></button>
+          <button role="tab" data-k="exposure"><svg><use href="#s-warn"/></svg><b>What could a thief take from me today?</b><code>gotchu exposure</code></button>
+          <button role="tab" data-k="harden"><svg><use href="#s-act"/></svg><b>Is my Windows locked down properly?</b><code>gotchu harden</code></button>
+          <button role="tab" data-k="tripwire"><svg><use href="#s-warn"/></svg><b>Is someone going through my things?</b><code>gotchu tripwire</code></button>
+          <button role="tab" data-k="vault"><svg><use href="#s-ok"/></svg><b>Can I make my keys useless to a thief?</b><code>gotchu vault</code></button>
+        </div>
+        <div>
+          <div class="window" role="tabpanel" aria-live="polite">
+            <div class="typed">PS C:\&gt; <b id="typed"></b></div>
+            <div class="out" id="out"></div>
+          </div>
+          <p class="note">Example results. The wording is what GotchU prints.</p>
+        </div>
+      </div>
+
+      <div class="promises">
+        <div><h3>Nothing leaves your PC</h3><p>No account, no cloud, no uploads. GotchU makes no network connections at all.</p></div>
+        <div><h3>Nothing changes without your yes</h3><p>It only looks until you tell it to act, and every change it makes has an undo.</p></div>
+        <div><h3>Free, and open to read</h3><p>No paid tier, no upsell. The code is short enough to read, and uses nothing but Python's standard library.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet limits" id="limits">
+    <div class="wrap board">
+      <div>
+        <h2>What we can't do</h2>
+        <p>No tool stops every attack. One that says it does isn't being straight with you.</p>
+      </div>
+      <ul>
+        <li>The alarm goes off for the fakes. A program that reads your real logins is listed for you to review, but it does not set off the alarm yet.</li>
+        <li>Malware that gets administrator rights can switch off any security tool, this one included.</li>
+        <li>A key you take out of the vault is an ordinary file again until you delete it.</li>
+        <li>It is early. It works on the Windows 11 laptop it was built on, and has not been tested widely.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="get" id="get">
+    <div class="inner">
+      <div>
+        <h2>Before the next wrong click.</h2>
+        <p>Windows 10 or 11, and Python 3.10 or newer. Nothing else to install, nothing to sign up for.</p>
+      </div>
+      <div class="install">
+        <pre id="install">git clone https://github.com/AnshMittal08/GotchU
+cd GotchU
+python -m gotchu ui</pre>
+        <button class="button copy" type="button" id="copy">Copy</button>
+        <a class="button go" href="https://github.com/AnshMittal08/GotchU">Open the source on GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer><span>GotchU is free. No account, no telemetry, no upsell.</span><span>Runs only on your PC.</span></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  const still = new URLSearchParams(location.search).has("still");          // for screenshots: no easing, no intro
+  const calm = still || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const root = document.documentElement;
+  const $ = (q) => document.querySelector(q), $$ = (q) => [...document.querySelectorAll(q)];
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const span = (v, a, b) => clamp((v - a) / (b - a));          // 0 before a, 1 after b
+  const ease = (t) => t * t * (3 - 2 * t);
+  const mix = (a, b, t) => a + (b - a) * t;
+
+  /* ================= The console: pick a question, see the answer ================= */
+  const ANSWERS = {
+    check: { cmd: "gotchu check Download_Game_Archive_free.zip", sign: ["danger", "Dangerous", "Do not run this. It uses tricks that only malware needs."],
+      rows: [["stop", "Game engine used as a wrapper", "A real installer does not hide inside a game engine. This is done to get past antivirus."],
+             ["stop", "Padding file: data.bin (339 MB of empty data)", "Makes the download too big for many scanners to look inside."],
+             ["stop", "Trusted program paired with an untrusted DLL", "A signed program is used to load a file that is not signed by anyone."]] },
+    scan: { cmd: "gotchu scan", sign: ["ok", "No signs found", "None of the known signs of infection are present. This is not a guarantee - some malware hides from checks like these."],
+      rows: [["info", "Looked at 284 running programs, 27 auto-start tasks and 20 start-up entries", "Nothing was changed on this PC."]] },
+    exposure: { cmd: "gotchu exposure", sign: ["warn", "A thief could read 11 of 12 secret stores", "This is what one bad download could take from this PC today. Nothing here was copied or shown."],
+      rows: [["warn", "Google Chrome: 148 saved passwords", "Any program you run can read this. Move them to a password manager with its own master lock."],
+             ["warn", "Telegram Desktop: 1 signed-in session", "A copy of this folder signs a thief in as you."],
+             ["warn", "Downloads folder: 3 key and secret files", "Put them in the vault so a stolen copy is useless."]] },
+    harden: { cmd: "gotchu harden", sign: ["warn", "3 of 8 locks on", "Each lock that is off is a way in. They are listed with what they cost and the alternative."],
+      rows: [["warn", "Off: Documents are protected from ransomware", "Cost: games and tools that save there are blocked until you allow them once."],
+             ["info", "On: Known-bad websites are blocked for every program", "Stops any program, not just the browser, from reaching servers known to host malware."]] },
+    tripwire: { cmd: "gotchu tripwire", sign: ["danger", "The tripwire was tripped", "Something read a decoy that no honest program touches."],
+      rows: [["stop", "Alarm at 17:24:58: a program read a decoy", "Program: C:\\Users\\you\\Downloads\\free-game-setup.exe. GotchU blocked it from the internet."],
+             ["info", "The tripwire is on: 4 decoys, 24 real stores watched", "Reads of real stores by other programs are listed here."]] },
+    vault: { cmd: "gotchu vault add --move server.pem", lines: [
+      ["Vault passphrase (or recovery key): ", "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"],
+      ["server.pem: in the vault, original deleted.", ""], ["", ""],
+      ["PS C:\\> ", "gotchu vault use server.pem -- ssh -i {} admin@host"],
+      ["The key exists on disk only while ssh runs.", ""]] },
+  };
+  const ICON = { stop: "s-stop", warn: "s-warn", info: "s-info" };
+  const SIGNICON = { danger: "s-stop-white", warn: "s-warn-ink", ok: "s-ok-white" };
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const icon = (id) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"), u = document.createElementNS("http://www.w3.org/2000/svg", "use"); u.setAttribute("href", "#" + id); s.append(u); return s; };
+  const tabs = $$(".asklist button"), typed = $("#typed"), out = $("#out");
+  let typing = 0;
+
+  function answer(key, animate) {
+    const a = ANSWERS[key];
+    tabs.forEach((t) => { const on = t.dataset.k === key; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; });
+    out.classList.remove("in");
+    out.replaceChildren();
+    if (a.sign) {
+      const sign = el("div", "sign " + a.sign[0]);
+      const words = el("div"); words.append(el("strong", "", a.sign[1]), el("span", "", a.sign[2]));
+      sign.append(icon(SIGNICON[a.sign[0]]), words);
+      const rows = el("ul", "rows");
+      for (const [kind, title, detail] of a.rows) { const li = el("li"), d = el("div"); d.append(el("b", "", title), el("span", "", detail)); li.append(icon(ICON[kind]), d); rows.append(li); }
+      out.append(sign, rows);
+    } else {
+      const pre = el("pre", "plainlines");
+      for (const [dim, bright] of a.lines) { pre.append(el("i", "", dim), bright + "\n"); }
+      out.append(pre);
+    }
+    clearInterval(typing);
+    if (!animate || calm) { typed.textContent = a.cmd; out.classList.add("in"); return; }
+    let n = 0; typed.textContent = "";
+    typing = setInterval(() => { typed.textContent = a.cmd.slice(0, ++n); if (n >= a.cmd.length) { clearInterval(typing); out.classList.add("in"); } }, 16);
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => answer(t.dataset.k, true));
+    t.addEventListener("keydown", (e) => {
+      const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+      if (!step) return;
+      e.preventDefault();
+      const next = tabs[(i + step + tabs.length) % tabs.length]; next.focus(); answer(next.dataset.k, true);
+    });
+  });
+  answer("exposure", false);
+  // Two things happen once, when you reach them: the question is drawn across, and the console types its first answer.
+  const once = (node, run) => new IntersectionObserver((seen, watch) => { if (seen[0].isIntersecting) { watch.disconnect(); run(); } }, { threshold: 0.5 }).observe(node);
+  once($(".asks"), () => $(".asks").classList.add("seen"));
+  once($(".window"), () => answer("exposure", true));
+
+  $("#copy").addEventListener("click", async (e) => {
+    try { await navigator.clipboard.writeText($("#install").textContent); e.target.textContent = "Copied"; }
+    catch (err) { e.target.textContent = "Select and copy"; }
+    setTimeout(() => (e.target.textContent = "Copy"), 1800);
+  });
+
+  /* ================= The story ================= */
+  root.classList.add("live");
+  if (still) root.classList.add("still");
+  const story = $("#story"), stage = $(".stage"), getIt = $("#get"), caps = $$(".cap"), cue = $(".cue"), alarm = $(".alarm"), rail = $$(".rail li");
+  const tags = $$(".tag"), counts = $$("[data-count]"), PATHS = $$(".tag small").map((n) => n.textContent);
+  const BEATS = [0.10, 0.235, 0.39, 0.51, 0.668, 0.84];
+  const TRIP = 0.668;
+  let target = 0, s = 0, wordAt = 0;
+
+  function measure() {
+    const r = story.getBoundingClientRect();
+    target = clamp(-r.top / (r.height - innerHeight));
+    wordAt = clamp((innerHeight - getIt.getBoundingClientRect().top) / (innerHeight * 0.9));
+  }
+
+  function captions() {
+    caps.forEach((c) => {
+      const from = +c.dataset.from, to = +c.dataset.to;
+      const inn = span(s, from, from + 0.018), outt = span(s, to - 0.018, to);
+      const v = inn * (1 - outt);
+      c.style.opacity = v;
+      c.style.transform = `translateY(${(1 - ease(inn)) * 36 - ease(outt) * 36}px)`;
+      c.inert = v < 0.05;
+    });
+    cue.style.opacity = 1 - span(s, 0.01, 0.05);
+    rail.forEach((li, i) => li.classList.toggle("on", s >= BEATS[i] - 0.01 && (i === rail.length - 1 || s < BEATS[i + 1] - 0.01)));
+    const k = ease(span(s, 0.40, 0.46));
+    counts.forEach((b) => (b.textContent = (+b.dataset.count * k).toFixed(1) + b.dataset.unit));
+  }
+
+  const canvas = $("#scene");
+  let renderer = null;
+  if (window.THREE) { try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); } catch (e) { renderer = null; } }
+
+  if (!renderer) {
+    // No 3D available: the words still tell the story.
+    const tick = () => { measure(); s = target; captions(); document.body.classList.toggle("tripped", s >= TRIP && wordAt === 0); alarm.classList.toggle("show", s >= TRIP && s < 0.83); requestAnimationFrame(tick); };
+    tick();
+    return;
+  }
+
+  /* ----- one cloud of points that becomes, in turn: a safe, its contents, a stream leaving, and a name ----- */
+  const small = () => innerWidth <= 860;
+  const N = small() ? 9000 : 17000;
+  const rnd = Math.random;
+  const scatter = new Float32Array(N * 3), cube = new Float32Array(N * 3), local = new Float32Array(N * 3), word = new Float32Array(N * 3);
+  const seed = new Float32Array(N), size = new Float32Array(N), group = new Float32Array(N), kind = new Float32Array(N);
+
+  function safePoint(i) {       // a unit safe: box, sharper edges, and a door with a dial on the front
+    const r = rnd(), set = (x, y, z) => { cube[i * 3] = x; cube[i * 3 + 1] = y; cube[i * 3 + 2] = z; };
+    const u = rnd() * 2 - 1, v = rnd() * 2 - 1, a = rnd() * Math.PI * 2;
+    if (r < 0.40) { const f = Math.floor(rnd() * 6), w = f < 2 ? [f ? 1 : -1, u, v] : f < 4 ? [u, f === 2 ? 1 : -1, v] : [u, v, f === 4 ? 1 : -1]; set(...w); }
+    else if (r < 0.62) { const e = Math.floor(rnd() * 12), q = [-1, 1][e & 1], w = [-1, 1][(e >> 1) & 1], axis = Math.floor(e / 4); axis === 0 ? set(u, q, w) : axis === 1 ? set(q, u, w) : set(q, w, u); }
+    else if (r < 0.74) { const side = Math.floor(rnd() * 4), d = 0.74; side === 0 ? set(u * d, d, 1.03) : side === 1 ? set(u * d, -d, 1.03) : side === 2 ? set(d, u * d, 1.03) : set(-d, u * d, 1.03); }
+    else if (r < 0.88) set(Math.cos(a) * 0.40, Math.sin(a) * 0.40, 1.05);
+    else if (r < 0.92) set(Math.cos(a) * 0.12, Math.sin(a) * 0.12, 1.07);
+    else if (r < 0.98) { const spoke = Math.floor(rnd() * 3) * 2.094 + 0.5, len = 0.12 + rnd() * 0.42; set(Math.cos(spoke) * len, Math.sin(spoke) * len, 1.07); }
+    else set(-0.74 + rnd() * 0.05, (rnd() < 0.5 ? 0.45 : -0.45) + (rnd() - 0.5) * 0.22, 1.06);
+  }
+  // Each store is a pictogram, drawn the way a road sign would draw it and then sampled into points.
+  const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const dot = (g, x, y, r) => { g.save(); g.fillStyle = "#fff"; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.restore(); };
+  const PICTOGRAMS = [
+    (g) => {      // saved passwords: a padlock
+      rr(g, 46, 92, 108, 82, 14); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(68, 92); g.lineTo(68, 70); g.arc(100, 70, 32, Math.PI, 0); g.lineTo(132, 92); g.stroke();
+      dot(g, 100, 124, 9); g.beginPath(); g.moveTo(100, 128); g.lineTo(100, 148); g.stroke();
+    },
+    (g) => {      // signed-in sessions: a cookie
+      g.beginPath(); g.arc(100, 104, 66, 0, 7); g.fill(); g.stroke();
+      g.save(); g.globalCompositeOperation = "destination-out"; g.fillStyle = "#000"; g.beginPath(); g.arc(152, 52, 30, 0, 7); g.fill(); g.restore();
+      g.save(); g.beginPath(); g.arc(100, 104, 71, 0, 7); g.clip(); g.beginPath(); g.arc(152, 52, 30, 0, 7); g.stroke(); g.restore();
+      dot(g, 78, 86, 8); dot(g, 112, 112, 9); dot(g, 82, 134, 7); dot(g, 128, 146, 6); dot(g, 114, 70, 5);
+    },
+    (g) => {      // Telegram and Discord: a speech bubble
+      g.beginPath(); g.moveTo(56, 44); g.arcTo(166, 44, 166, 136, 22); g.arcTo(166, 136, 34, 136, 22); g.lineTo(88, 136); g.lineTo(52, 170); g.lineTo(62, 136);
+      g.arcTo(34, 136, 34, 44, 22); g.arcTo(34, 44, 166, 44, 22); g.closePath(); g.fill(); g.stroke();
+      dot(g, 70, 90, 8); dot(g, 100, 90, 8); dot(g, 130, 90, 8);
+    },
+    (g) => {      // key files: a key
+      g.translate(100, 100); g.rotate(-0.6); g.translate(-100, -100);
+      g.beginPath(); g.arc(50, 100, 30, 0, 7); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(80, 100); g.lineTo(174, 100); g.moveTo(146, 100); g.lineTo(146, 126); g.moveTo(168, 100); g.lineTo(168, 120); g.stroke();
+    },
+    (g) => {      // cloud logins: a cloud, outlined as one shape
+      const blob = (d) => { for (const [x, y, r] of [[70, 122, 32], [108, 94, 42], [146, 124, 30]]) { g.beginPath(); g.arc(x, y, r - d, 0, 7); g.fill(); } g.fillRect(70, 110, 76, 44 - d); };
+      g.fillStyle = "#fff"; blob(0);
+      g.globalCompositeOperation = "destination-out"; blob(11);
+      g.globalCompositeOperation = "destination-over"; g.fillStyle = "rgba(255,255,255,.3)"; blob(5);
+    },
+    (g) => {      // crypto wallets: a wallet
+      rr(g, 32, 66, 136, 92, 14); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(46, 66); g.lineTo(134, 42); g.lineTo(142, 66); g.stroke();
+      rr(g, 122, 96, 46, 32, 10); g.stroke(); dot(g, 140, 112, 5);
+    },
+  ].map((draw) => {
+    const c = document.createElement("canvas"); c.width = c.height = 200;
+    const g = c.getContext("2d");
+    g.lineWidth = 11; g.lineCap = g.lineJoin = "round"; g.strokeStyle = "#fff"; g.fillStyle = "rgba(255,255,255,.3)";
+    draw(g);
+    const px = g.getImageData(0, 0, 200, 200).data, hits = [];
+    for (let y = 0; y < 200; y++) for (let x = 0; x < 200; x++) {       // outlines count four times as much as the fill
+      const a = px[(y * 200 + x) * 4 + 3];
+      if (a > 40) for (let k = a > 200 ? 4 : 1; k--;) hits.push(x, y);
+    }
+    return hits;
+  });
+
+  for (let i = 0; i < N; i++) {
+    const a = rnd() * Math.PI * 2, z = rnd() * 2 - 1, q = Math.sqrt(1 - z * z), far = 5 + rnd() * 9;
+    scatter.set([Math.cos(a) * q * far, z * far, Math.sin(a) * q * far - 4], i * 3);
+    safePoint(i);
+    word.set([(rnd() - 0.5) * 2, (rnd() - 0.5) * 0.3, 0], i * 3);
+    seed[i] = rnd();
+    size[i] = rnd() < 0.035 ? 2.3 : 0.65 + rnd() * 0.8;
+    const decoy = i < N * 0.07;
+    group[i] = decoy ? 6 + (i % 3) : i % 6;
+    kind[i] = decoy ? 2 : rnd() < 0.56 ? 1 : 0;                 // 2 decoy, 1 the copy that leaves, 0 the original that stays
+    const hits = PICTOGRAMS[decoy ? 5 : group[i]];              // a decoy is a fake wallet, so it looks like one
+    if (hits.length) {
+      const h = Math.floor(rnd() * hits.length / 2) * 2;
+      local.set([(hits[h] + rnd() - 100) / 87, -(hits[h + 1] + rnd() - 100) / 87, (rnd() - 0.5) * 0.16], i * 3);
+    } else {                                                    // no 2D canvas to draw on: a ball will do
+      const shell = Math.pow(rnd(), 0.22), b = rnd() * Math.PI * 2, y = rnd() * 2 - 1, w = Math.sqrt(1 - y * y);
+      local.set([Math.cos(b) * w * shell, y * shell, Math.sin(b) * w * shell], i * 3);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  const attr = (name, array, n) => geo.setAttribute(name, new THREE.BufferAttribute(array, n));
+  attr("position", scatter, 3); attr("aCube", cube, 3); attr("aLocal", local, 3); attr("aWord", word, 3);
+  attr("aSeed", seed, 1); attr("aSize", size, 1); attr("aGroup", group, 1); attr("aKind", kind, 1);
+
+  const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+  const U = {
+    uTime: 0, uPx: 1, uCalm: calm ? 0 : 1, uAssemble: 0, uSway: 0, uInfect: 0, uOpen: 0, uRead: 0, uGone: 0, uDecoy: 0, uRead2: 0,
+    uInk: 0, uShock: 0, uBlocked: 0, uWord: 0, uCube: 1.3, uR: 0.78, uRd: 0.26, uSweepLen: 1, uTripOrder: 0.3, uWordScale: 1,
+    uOff: V3(), uFar: V3(), uSweepO: V3(), uSweepDir: V3(1), uShockPos: V3(), uWordPos: V3(), uEntry: V3(-1, 0.6, 1),
+    uCentres: Array.from({ length: 9 }, () => V3()),
+  };
+  const uniforms = Object.fromEntries(Object.entries(U).map(([k, v]) => [k, { value: v }]));
+  const material = new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `
+      uniform float uTime, uPx, uCalm, uAssemble, uSway, uInfect, uOpen, uRead, uGone, uDecoy, uRead2, uInk, uShock, uBlocked, uWord;
+      uniform float uCube, uR, uRd, uSweepLen, uTripOrder, uWordScale;
+      uniform vec3 uOff, uFar, uSweepO, uSweepDir, uShockPos, uWordPos, uEntry;
+      uniform vec3 uCentres[9];
+      attribute vec3 aCube, aLocal, aWord;
+      attribute float aSeed, aSize, aGroup, aKind;
+      varying vec3 vColor;
+      varying float vAlpha;
+      vec3 rotY(vec3 p, float a) { float c = cos(a), s = sin(a); return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z); }
+      float ease(float t) { return t * t * (3. - 2. * t); }
+      void main() {
+        vec3 centre = uCentres[int(aGroup + .5)];
+        float isDecoy = step(5.5, aGroup);
+        float isCopy = step(.5, aKind) * (1. - step(1.5, aKind));
+        float isOrig = 1. - step(.5, aKind);
+        float rad = mix(uR, uRd, isDecoy);
+        // each store faces you and sways a little, out of step with its neighbours
+        vec3 isle = centre + rotY(aLocal, sin(uTime * .55 + aGroup * 1.7) * .45 * uCalm) * rad;
+        // where this point sits along the thief's sweep, 0 first to 1 last (taken from its resting place, so it does not flicker)
+        float order = dot(centre + aLocal * rad - uSweepO, uSweepDir) / uSweepLen;
+
+        // scattered -> the safe -> its contents
+        vec3 safe = rotY(aCube * uCube, uSway) + uOff;
+        vec3 p = mix(position + uOff, safe, ease(clamp((uAssemble - aSeed * .35) / .65, 0., 1.)));
+        float open = ease(clamp((uOpen - aSeed * .3) / .7, 0., 1.));
+        p = mix(p, isle, open);
+
+        // the copies are carried off, in the order they were read
+        float start = order * .5 + aSeed * .12;
+        float g = clamp((uGone - start) / .38, 0., 1.); g *= g;
+        p = mix(p, uFar, g * isCopy) + vec3(0., sin(g * 3.1416) * 1.8 * (aSeed - .35), 0.) * isCopy;
+        float alpha = 1. - smoothstep(.7, 1., g) * isCopy;
+        alpha *= mix(1., .28, smoothstep(start, start + .15, uGone) * isOrig);
+
+        // with the cut: copies peel away, get nowhere, and crumble
+        float caught = isCopy * step(order, uTripOrder);
+        float gb = clamp((uBlocked - aSeed * .35) / .4, 0., 1.);
+        float drop = smoothstep(.45, 1., gb);
+        p += (vec3(.55, .34, .3) * smoothstep(0., .45, gb) + vec3(0., -drop * drop * 1.5, 0.)) * caught;
+        alpha *= 1. - drop * caught;
+        // once the alarm has gone off, what the thief never reached steps back
+        float aside = max((1. - isDecoy) * step(uTripOrder, order), step(6.5, aGroup));
+        alpha *= mix(1., .6, uInk * aside);
+
+        // the alarm goes out as a ring
+        vec3 away = p - uShockPos; float dist = length(away) + .0001;
+        float ring = exp(-pow((dist - uShock * 10.) / .6, 2.)) * (1. - uShock) * step(.001, uShock);
+        p += away / dist * ring * .6;
+
+        // and at the end, the name
+        float named = ease(clamp((uWord - aSeed * .3) / .7, 0., 1.));
+        p = mix(p, aWord * uWordScale + uWordPos, named);
+        p += .03 * uCalm * vec3(sin(uTime * .7 + aSeed * 50.), cos(uTime * .6 + aSeed * 31.), sin(uTime * .5 + aSeed * 17.));
+
+        vec3 pale = mix(vec3(.36, .47, .78), vec3(.80, .87, 1.), aSeed);
+        float inSafe = distance(aCube, uEntry) / 3.5;
+        float infected = smoothstep(inSafe - .1, inSafe, uInfect * 1.15) * (1. - open);
+        float read1 = smoothstep(order - .02, order + .02, uRead * 1.06 - .03);
+        float read2 = smoothstep(order - .02, order + .02, uRead2) * step(.0001, uRead2);
+        float red = max(infected, max(read1, read2)) * (1. - isDecoy);
+        vec3 col = mix(pale, vec3(1., .22, .17), red);
+        col = mix(col, vec3(1., .74, 0.), isDecoy * (1. - named));
+        col = mix(col, mix(vec3(.04, .06, .09), vec3(.70, .06, .08), red), uInk);     // on yellow, points are ink
+        col = mix(col, vec3(.74, .53, 0.), uInk * aside);                             // or a darker yellow, for what stepped back
+        alpha *= mix(1., max(uDecoy, named), isDecoy);
+        alpha *= mix(1., .74 + .26 * sin(uTime * 1.6 + aSeed * 40.), uCalm);
+        vColor = col;
+        vAlpha = alpha * mix(.62, 1., uInk);
+        vec4 mv = modelViewMatrix * vec4(p, 1.);
+        gl_PointSize = uPx * aSize * (1. + isDecoy * .3 + red * .25) * 36. / -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        float a = smoothstep(.5, .12, length(gl_PointCoord - .5)) * vAlpha;
+        if (a < .01) discard;
+        gl_FragColor = vec4(vColor, a);
+      }`,
+  });
+  const points = new THREE.Points(geo, material);
+  points.frustumCulled = false;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+  scene.add(points);
+
+  // The download, arriving: one red point with a name.
+  const bug = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff3a2c, transparent: true }));
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff3a2c, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+  bug.add(halo); scene.add(bug);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.985, 1, 128), new THREE.MeshBasicMaterial({ color: 0x0b0f16, transparent: true, side: THREE.DoubleSide, depthTest: false }));
+  scene.add(ring);
+
+  let W = 1, H = 1, wide = true, halfW = 1, halfH = 1;
+  const DIST = 11;
+  function layout() {
+    W = innerWidth; H = innerHeight; wide = !small();
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(W, H, false);
+    camera.aspect = W / H; camera.updateProjectionMatrix();
+    halfH = Math.tan(THREE.MathUtils.degToRad(20)) * DIST; halfW = halfH * camera.aspect;
+    U.uPx = renderer.getPixelRatio() * (wide ? 1 : 0.8);
+    const c = U.uCentres;
+    if (wide) {                                   // three columns of two, on the right; the thief sweeps left to right
+      const x0 = -0.10 * halfW, x1 = 0.90 * halfW, col = (x1 - x0) / 3, cx = (i) => x0 + col * (i + 0.5), row = Math.min(1.7, halfH * 0.42);
+      U.uR = Math.min(0.80, col * 0.34); U.uRd = U.uR * 0.4;
+      const up = 0.25;                              // the names hang below, so the grid sits a little high
+      [0, 1, 2].forEach((i) => { c[i * 2].set(cx(i), row + up, 0); c[i * 2 + 1].set(cx(i), -row + up, 0); });
+      c[6].set(x0 + col, up, 0); c[7].set(cx(1), up, 0); c[8].set(x0 + col * 2, up, 0);
+      U.uOff.set((x0 + x1) / 2, 0, 0); U.uCube = Math.min(1.42, halfH * 0.36);
+      U.uSweepDir.set(1, 0, 0); U.uSweepO.set(cx(0) - U.uR, 0, 0); U.uSweepLen = cx(2) + U.uR - (cx(0) - U.uR);
+      U.uTripOrder = (c[6].x - U.uRd - U.uSweepO.x) / U.uSweepLen;
+      U.uFar.set(halfW * 2.6, halfH * 2.2, -34);
+      U.uWordScale = Math.min(halfW * 0.74, halfH * 1.25); U.uWordPos.set(0, halfH * 0.34, 0);
+    } else {                                      // two columns of three, at the top; the thief sweeps downward
+      const top = halfH * 0.80, gap = halfH * 0.29, cy = (i) => top - gap * (i + 0.5) + gap * 0.15, cx = halfW * 0.46;
+      U.uR = Math.min(gap * 0.36, halfW * 0.36); U.uRd = U.uR * 0.36;
+      [0, 1, 2].forEach((i) => { c[i * 2].set(-cx, cy(i), 0); c[i * 2 + 1].set(cx, cy(i), 0); });
+      c[6].set(0, (cy(0) + cy(1)) / 2, 0); c[7].set(0, cy(1), 0); c[8].set(0, (cy(1) + cy(2)) / 2, 0);
+      U.uOff.set(0, cy(1), 0); U.uCube = Math.min(halfW * 0.5, gap * 0.95);
+      U.uSweepDir.set(0, -1, 0); U.uSweepO.set(0, cy(0) + U.uR, 0); U.uSweepLen = cy(0) + U.uR - (cy(2) - U.uR);
+      U.uTripOrder = (U.uSweepO.y - (c[6].y + U.uRd)) / U.uSweepLen;
+      U.uFar.set(halfW * 2.4, halfH * 2.6, -34);
+      U.uWordScale = halfW * 0.86; U.uWordPos.set(0, halfH * 0.36, 0);
+    }
+    U.uShockPos.copy(c[6]);
+  }
+
+  function nameIt() {       // sample the word from real lettering, so the points land on the logotype
+    const c = document.createElement("canvas"); c.width = 1400; c.height = 360;
+    const g = c.getContext("2d");
+    g.font = '800 300px "Barlow Condensed", Bahnschrift, "Arial Narrow", sans-serif'; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText("GotchU", 700, 190);
+    const px = g.getImageData(0, 0, 1400, 360).data, hits = [];
+    let lo = 1400, hi = 0;
+    for (let y = 0; y < 360; y += 2) for (let x = 0; x < 1400; x += 2) if (px[(y * 1400 + x) * 4 + 3] > 140) { hits.push(x, y); lo = Math.min(lo, x); hi = Math.max(hi, x); }
+    if (!hits.length) return;
+    const mid = (lo + hi) / 2, half = (hi - lo) / 2;
+    for (let i = 0; i < N; i++) { const h = Math.floor(rnd() * hits.length / 2) * 2; word.set([(hits[h] + rnd() * 2 - mid) / half, -(hits[h + 1] + rnd() * 2 - 190) / half, (rnd() - 0.5) * 0.05], i * 3); }
+    geo.attributes.aWord.needsUpdate = true;
+  }
+  nameIt();
+  if (document.fonts && document.fonts.load) document.fonts.load('800 300px "Barlow Condensed"').then(nameIt).catch(() => {});
+
+  const pointer = { x: 0, y: 0, cx: 0, cy: 0 };
+  addEventListener("pointermove", (e) => { pointer.x = e.clientX / innerWidth * 2 - 1; pointer.y = e.clientY / innerHeight * 2 - 1; });
+
+  const probe = V3();
+  function pin(tag, at, alpha, below) {
+    probe.copy(at).project(camera);
+    tag.style.opacity = alpha;
+    tag.style.transform = `translate(${(probe.x * 0.5 + 0.5) * W}px, ${(-probe.y * 0.5 + 0.5) * H}px) translate(-50%, ${below ? "0" : "-50%"})`;
+  }
+
+  const t0 = performance.now();
+  let last = t0, ink = 0, tripAt = 0, wasTripped = false, shake = 0;
+  function frame(now) {
+    requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    measure();
+    s = calm ? target : s + (target - s) * Math.min(1, dt * 7);
+    captions();
+
+    const finale = wordAt > 0, tripped = s >= TRIP && !finale;
+    document.body.classList.toggle("tripped", tripped);
+    alarm.classList.toggle("show", tripped && s < 0.83);
+    if (tripped && !wasTripped) { tripAt = now; shake = calm ? 0 : 1; }
+    wasTripped = tripped;
+
+    if (!finale && story.getBoundingClientRect().bottom < 0) return;       // the sheets cover the scene: nothing to draw
+    canvas.style.transform = `translateY(${finale ? 0 : Math.min(0, stage.getBoundingClientRect().top)}px)`;   // leave with the stage
+
+    const t = (now - t0) / 1000;
+    U.uTime = t;
+    U.uAssemble = calm ? 1 : clamp(t / 2.1);
+    const open = finale ? 1 : ease(span(s, 0.225, 0.30));
+    U.uSway = (calm ? 0.42 : 0.42 + Math.sin(t * 0.32) * 0.34) * (1 - open) + pointer.cx * 0.12;
+    U.uInfect = finale ? 0 : span(s, 0.13, 0.205);
+    U.uOpen = open;
+    U.uRead = finale ? 0 : span(s, 0.30, 0.375) * (1 - span(s, 0.525, 0.565));
+    U.uGone = finale ? 0 : clamp(span(s, 0.385, 0.475) - span(s, 0.50, 0.555));
+    U.uDecoy = finale ? 1 : span(s, 0.555, 0.60);
+    U.uRead2 = finale ? 0 : span(s, 0.615, TRIP) * (U.uTripOrder + 0.03);
+    U.uBlocked = finale ? 0 : span(s, 0.69, 0.80);
+    U.uWord = ease(wordAt);
+    ink = calm ? +tripped : clamp(ink + (tripped ? 1 : -1) * dt * 7);
+    U.uInk = ink;
+    U.uShock = tripped ? (calm ? 1 : clamp((now - tripAt) / 1150)) : 0;
+    material.blending = ink > 0.5 ? THREE.NormalBlending : THREE.AdditiveBlending;
+    for (const k in U) if (typeof U[k] === "number") uniforms[k].value = U[k];
+
+    // camera: drifts with the pointer, leans in on the download, looks after the stream as it leaves
+    pointer.cx += (pointer.x - pointer.cx) * Math.min(1, dt * 3); pointer.cy += (pointer.y - pointer.cy) * Math.min(1, dt * 3);
+    shake = Math.max(0, shake - dt * 2.4);
+    const lean = ease(span(s, 0.10, 0.20)) * (1 - open), chase = ease(U.uGone);
+    camera.position.set(pointer.cx * 0.45 + mix(0, U.uOff.x * 0.22, lean) + Math.sin(now * 0.09) * shake * 0.08,
+                        -pointer.cy * 0.3 + Math.cos(now * 0.11) * shake * 0.08, DIST - lean * 1.6 + chase * (wide ? 0.8 : 0.3));
+    camera.lookAt(chase * (wide ? 0.9 : 0.2), chase * (wide ? 0.5 : 0.25), 0);
+    camera.updateMatrixWorld();                 // so the name tags are placed with this frame's view, not the last one's
+
+    // the download and its name
+    const fly = ease(span(s, 0.095, 0.135)), landed = span(s, 0.135, 0.16);
+    const door = V3(U.uEntry.x, U.uEntry.y, U.uEntry.z).multiplyScalar(U.uCube).applyAxisAngle(V3(0, 1, 0), U.uSway).add(U.uOff);
+    bug.position.set(mix(door.x - halfW * 1.1, door.x, fly), mix(door.y + halfH * 0.5, door.y, fly * fly), mix(2.5, door.z, fly));
+    bug.visible = !finale && fly > 0 && landed < 1 && open < 0.5;
+    bug.material.opacity = 1 - landed; halo.material.opacity = 0.22 * (1 - landed);
+    pin(tags[9], bug.position.clone().add(V3(0, 0.34, 0)), bug.visible ? span(fly, 0.05, 0.3) * (1 - landed) : 0, false);
+
+    ring.visible = U.uShock > 0 && U.uShock < 1;
+    ring.position.copy(U.uShockPos); ring.quaternion.copy(camera.quaternion);
+    ring.scale.setScalar(Math.max(0.001, U.uShock * 10)); ring.material.opacity = (1 - U.uShock) * 0.9;
+
+    // names under the stores
+    const named = finale ? 0 : span(open, 0.75, 1);
+    for (let i = 0; i < 9; i++) {
+      const c = U.uCentres[i], decoy = i > 5, r = decoy ? U.uRd : U.uR;
+      const order = (wide ? c.x - U.uSweepO.x : U.uSweepO.y - c.y) / U.uSweepLen;
+      const aside = decoy ? i > 6 : order > U.uTripOrder;       // not reached by the thief the second time
+      pin(tags[i], V3(c.x, c.y - r - 0.16, 0), named * (decoy ? U.uDecoy : 1) * (aside ? 1 - ink * 0.72 : 1), true);
+      if (decoy) continue;
+      tags[i].classList.toggle("taken", U.uRead * 1.06 - 0.03 > order || (U.uRead2 > 0 && U.uRead2 > order));
+      const blocked = tripped && !aside && U.uBlocked > 0.6;
+      if (blocked !== tags[i].classList.contains("blocked")) {
+        tags[i].classList.toggle("blocked", blocked);
+        tags[i].lastChild.textContent = blocked ? "copied, but the copy never left" : PATHS[i];
+      }
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  layout();
+  addEventListener("resize", layout);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
