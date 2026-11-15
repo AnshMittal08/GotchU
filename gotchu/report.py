@@ -1,7 +1,10 @@
 """Shared result shape for every command: a verdict plus findings, as data or as text."""
+import contextlib
 import json
 import os
 import subprocess
+import tempfile
+import time
 
 # Always Windows' own PowerShell, by its full path. Asked for by name alone, Windows looks in the current
 # folder first, so a file called powershell.exe inside a download would be run instead.
@@ -39,6 +42,78 @@ def build(subject, findings, labels, **extra):
     ordered = sorted(findings, key=lambda f: _ORDER[f[0]])
     return {"subject": subject, "level": lvl, "verdict": verdict, "advice": advice,
             "findings": [{"severity": s, "title": t, "detail": d} for s, t, d in ordered], **extra}
+
+
+def plural(count, word):
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def save_json(path, data):
+    """Write the whole file or nothing. A reader never sees half a file, and a crash leaves the old one."""
+    folder = os.path.dirname(path)
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        for attempt in range(100):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:     # Windows: another gotchu is reading it at this instant
+                if attempt == 99:
+                    raise
+                time.sleep(0.02)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+@contextlib.contextmanager
+def _locked(path, wait=10):
+    """One writer at a time, across gotchu's processes and the window's threads."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".lock", "a+b") as f:
+        if os.name == "nt":
+            import msvcrt
+            f.seek(0)
+            deadline = time.time() + wait
+            while True:
+                try:
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    if time.time() > deadline:
+                        raise
+                    time.sleep(0.02)
+            try:
+                yield
+            finally:
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def update_json(path, change, default):
+    """Read a small JSON file, change it and write it back, without losing a change made at the same moment
+    by another gotchu. A file damaged beyond reading starts again from default."""
+    with _locked(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            data = default
+        except ValueError:
+            data = default
+        data = change(data)
+        save_json(path, data)
+        return data
 
 
 def render(result):

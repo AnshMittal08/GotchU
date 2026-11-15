@@ -48,7 +48,7 @@ def _vault(args):
             return 1
         if args.action == "backup":
             count = vault.backup(args.folder)
-            print(f"Copied the vault ({count} files, still encrypted) to {args.folder}.\n"
+            print(f"Copied the vault ({report.plural(count, 'file')}, still encrypted) to {args.folder}.\n"
                   "The copy is useless without your passphrase or recovery key, so it is safe on a USB stick or in cloud storage.")
             return 0
         key = vault.unlock(getpass.getpass("Vault passphrase (or recovery key): "))
@@ -63,6 +63,8 @@ def _vault(args):
                 print("A deleted file can sometimes be recovered from the disk. If a key was ever exposed, replace it.")
         elif args.action == "get":
             target = args.to or args.name
+            if os.path.isdir(target):       # a folder to put it in, the way most people write it
+                target = os.path.join(target, os.path.basename(args.name))
             if os.path.exists(target):
                 print(f"{target} already exists. Nothing was written.")
                 return 1
@@ -111,6 +113,33 @@ def _setup(args):
     return 0 if ok else 1
 
 
+def _uninstall(args):
+    from . import uninstall
+    steps = uninstall.plan()
+    if not steps:
+        print("GotchU has nothing set up on this PC. To remove the program itself: " + uninstall.LAST_STEP)
+        return 0
+    prompts = sum(s["admin"] for s in steps)
+    print("Removing GotchU will:\n" + "\n".join(f"  - {s['text']}" for s in steps))
+    if prompts:
+        print(f"\nWindows will ask for your permission {report.plural(prompts, 'time')}. Choose Yes each time.")
+    if uninstall.kept():
+        print("\n" + uninstall.kept())
+    if not args.yes:
+        try:
+            answer = input("\nType yes to go ahead: ") if sys.stdin and sys.stdin.isatty() else ""
+        except EOFError:        # no keyboard to answer with
+            answer = ""
+        if answer.strip().lower() != "yes":
+            print("Nothing was changed. To go ahead without being asked: gotchu uninstall --yes")
+            return 1
+    ok, done, message = uninstall.run()
+    for text in done:
+        print(f"  done: {text}")
+    print("\n" + message)
+    return 0 if ok else 1
+
+
 class _Parser(argparse.ArgumentParser):
     """A mistyped command ends with code 3 (could not run). argparse's own 2 would read as 'dangerous'."""
 
@@ -155,7 +184,7 @@ def main(argv=None):
     act.add_parser("list", help="show what is in the vault")
     a = act.add_parser("get", help="take a file out as an ordinary file")
     a.add_argument("name")
-    a.add_argument("--to", help="where to write it (default: this folder)")
+    a.add_argument("--to", help="a folder to put it in, or a full file name (default: this folder)")
     a = act.add_parser("use", help="run a command with the file present only while it runs")
     a.add_argument("name")
     a.add_argument("run", nargs=argparse.REMAINDER, help="the command; {} is replaced by the file's path")
@@ -172,6 +201,8 @@ def main(argv=None):
     p.add_argument("--sites", action="store_true", help="also list the websites with a password saved on this PC (names only)")
     p = sub.add_parser("setup", help="install or update gotchu's administrator helpers in Program Files")
     p.add_argument("--remove", action="store_true", help="remove them, once nothing gotchu turned on still needs them")
+    p = sub.add_parser("uninstall", help="put back everything GotchU set up, before removing it (the vault is kept)")
+    p.add_argument("--yes", action="store_true", help="go ahead without asking")
     p = sub.add_parser("app", help="open GotchU in its own window")
     p.add_argument("path", nargs="?", help="a download to check as soon as the window opens")
     p.add_argument("--if-alarm", action="store_true", help="open only if an alarm is waiting for an answer (used at sign-in)")
@@ -193,6 +224,9 @@ def main(argv=None):
 
     if args.command == "setup":
         return _setup(args)
+
+    if args.command == "uninstall":
+        return _uninstall(args)
 
     try:
         return _run(args)

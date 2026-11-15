@@ -69,6 +69,32 @@ class CliTests(unittest.TestCase):
                 f.write("{not json")
             self.assertEqual(desktop.load_state(path), {})
 
+    def test_uninstall_puts_things_back_and_never_deletes_the_vault(self):
+        from gotchu import uninstall
+        with tempfile.TemporaryDirectory() as tmp:
+            local = os.path.join(tmp, "gotchu")
+            os.makedirs(os.path.join(local, "vault"))
+            with open(os.path.join(local, "vault", "vault.json"), "w") as f:
+                f.write("{}")
+            with open(os.path.join(local, "app.json"), "w") as f:
+                f.write("{}")
+            off = {"on": False, "cut": False}
+            with mock.patch.object(uninstall.tripwire, "LOCAL", local), \
+                    mock.patch.object(uninstall.tripwire, "STATE", os.path.join(local, "decoys.json")), \
+                    mock.patch.object(uninstall.vault, "FOLDER", os.path.join(local, "vault")), \
+                    mock.patch.object(uninstall.tripwire, "status", return_value=off), \
+                    mock.patch.object(uninstall.harden, "_saved", return_value=False), \
+                    mock.patch.object(uninstall.admin, "INSTALLED", os.path.join(tmp, "nothing-installed")), \
+                    mock.patch.object(uninstall.desktop, "menu_on", return_value=False), \
+                    mock.patch.object(uninstall.desktop, "shortcut_on", return_value=False), \
+                    mock.patch.object(uninstall, "_signin_on", return_value=False):
+                self.assertEqual([s["key"] for s in uninstall.plan()], ["local"])
+                ok, done, _ = uninstall.run()
+                self.assertTrue(ok)
+                self.assertEqual(os.listdir(local), ["vault"])
+                self.assertIn("vault is kept", uninstall.kept())
+                self.assertEqual(uninstall.plan(), [])      # run again: nothing left to do
+
 
 if __name__ == "__main__":
     unittest.main()

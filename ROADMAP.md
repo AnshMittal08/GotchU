@@ -110,7 +110,9 @@ point to the right tool instead of pretending.
       recovery key, without touching the files. New vaults use scrypt N=2^17; older ones are upgraded on unlock.
 - [x] `vault backup` and `vault restore`: copy the vault, still encrypted, to another drive and back. Restore
       refuses to replace a vault that exists.
-- [ ] `vault`: unlock with Windows Hello; page in the window; guides for SSH keys
+- [x] `vault` page in the window: make, open, add, take out, remove, new passphrase or recovery key,
+      back up and restore. It locks itself after 5 quiet minutes and when the window closes.
+- [ ] `vault`: unlock with Windows Hello; guides for SSH keys
       held by Windows Hello, short-lived cloud sign-in, Telegram passcode, moving browser passwords out.
 - [x] `respond`: a recovery checklist built from the exposure report, in priority order (money that cannot be
       called back first, then email, sessions, passwords, chat apps, cloud keys, key files, cleaning the PC).

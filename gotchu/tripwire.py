@@ -26,6 +26,7 @@ LOCAL = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "g
 STATE = os.path.join(LOCAL, "decoys.json")           # what gotchu planted, so it can remove exactly that
 INSTALLED = admin.INSTALLED                          # watcher, its settings and its logs: admin-only
 OWN = os.path.join(LOCAL, "own-reads.json")          # when gotchu itself counted saved logins
+OWN_KEEP_DAYS = 400                                  # longer than any read stays listed for review
 DECOY_SIZE = 2048
 
 HEARTBEAT_SECONDS = 180                              # the watcher marks a file every 30 seconds while it runs
@@ -96,18 +97,25 @@ def own_reads(path=OWN):
     try:
         yield
     finally:
+        span = [start - 2, time.time() + 2]
         try:
-            with open(path, encoding="utf-8") as f:
-                spans = json.load(f)
-        except (OSError, ValueError):
-            spans = []
-        spans = (spans if isinstance(spans, list) else [])[-60:] + [[start - 2, time.time() + 2]]
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(spans, f)
+            report.update_json(path, lambda spans: _add_span(spans, span), [])
         except OSError:
-            pass
+            pass    # unrecorded, the read is listed for review: too much is shown, never too little
+
+
+def _add_span(spans, new, keep_days=OWN_KEEP_DAYS):
+    """Kept by age, not by count: a span forgotten while its read is still listed would show gotchu as a suspect."""
+    oldest = time.time() - keep_days * 86400
+    spans = sorted([s for s in (spans if isinstance(spans, list) else [])
+                    if isinstance(s, list) and len(s) == 2 and s[1] >= oldest] + [new])
+    merged = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    return merged
 
 
 def _is_own(sighting, spans):
@@ -236,9 +244,7 @@ def _plant(appdata=None, path=STATE):
         state["roots"].append(root)
         state["files"].append(file)
         state["stamps"][file] = os.stat(file).st_mtime_ns
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(state, f)
+    report.save_json(path, state)     # half a list would make gotchu forget its decoys, then trip on them
     return state, retired, left
 
 

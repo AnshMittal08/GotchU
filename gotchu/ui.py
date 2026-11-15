@@ -18,7 +18,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import quote
 
-from . import __version__, admin, check, desktop, exposure, harden, report, respond, scan, tripwire
+from . import __version__, admin, check, desktop, exposure, harden, report, respond, scan, tripwire, uninstall, vault
 
 HERE = os.path.dirname(__file__)
 FONTS = ("barlow-500.woff2", "barlow-600.woff2", "barlow-semicondensed-600.woff2")
@@ -42,11 +42,138 @@ def recent_downloads(limit=12):
     return sorted(rows, key=lambda r: r["modified"], reverse=True)[:limit]
 
 
-def browse(folder):
+def browse(folder, multi=False, title="", start=""):
+    """Windows' own file or folder picker. Returns the chosen path ("" if cancelled), or a list with multi."""
     cmd = [report.POWERSHELL, "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File",
-           os.path.join(HERE, "browse.ps1")] + (["-Folder"] if folder else [])
+           os.path.join(HERE, "browse.ps1")] + (["-Folder"] if folder else []) + (["-Multi"] if multi else [])
+    cmd += (["-Title", title] if title else []) + (["-Start", start] if start else [])
     out = subprocess.run(cmd, capture_output=True, timeout=600)
-    return out.stdout.decode("utf-8", "replace").strip()
+    paths = [p.strip() for p in out.stdout.decode("utf-8", "replace").splitlines() if p.strip()]
+    return paths if multi else (paths[0] if paths else "")
+
+
+# ---- the vault, from the window ----
+# The unlocked key lives only in this process's memory: forgotten after VAULT_IDLE quiet seconds, when the page
+# closes, and when GotchU stops. The passphrase itself is used once and never kept.
+
+VAULT_IDLE = 300
+SEAL_EXTRA = 28     # each file in the vault is its own size plus a 12-byte nonce and a 16-byte tag
+
+
+def _new_passphrase(body):
+    """The new passphrase from the form, or (None, why not)."""
+    first, again = body.get("passphrase"), body.get("again")
+    if not isinstance(first, str) or len(first) < 10:
+        return None, "Use at least 10 characters. A few random words work well."
+    if first != again:
+        return None, "The two passphrases did not match."
+    return first, ""
+
+
+def vault_state(server):
+    if server.vault_key and time.time() - server.vault_used > VAULT_IDLE:
+        server.vault_key = None
+    out = {"exists": vault.exists(vault.FOLDER), "unlocked": bool(server.vault_key), "idle": VAULT_IDLE,
+           "folder": vault.FOLDER}
+    if server.vault_key:
+        files = []
+        for name, file_id in vault.names(server.vault_key, vault.FOLDER).items():
+            try:
+                size = max(0, os.path.getsize(os.path.join(vault.FOLDER, file_id + ".bin")) - SEAL_EXTRA)
+            except OSError:
+                size = None
+            files.append({"name": name, "size": size})
+        out["files"] = sorted(files, key=lambda f: f["name"].lower())
+    return out
+
+
+def vault_action(server, action, body):
+    """One vault action from the window. Returns (http code, answer)."""
+    key = server.vault_key if server.vault_key and time.time() - server.vault_used <= VAULT_IDLE else None
+    server.vault_key = key
+    done = lambda message="", **extra: (200, {"message": message, **extra, "vault": vault_state(server)})
+    if action == "":
+        return done()
+    if action == "lock":
+        server.vault_key = None
+        return done("The vault is locked.")
+    if action == "create":
+        passphrase, why = _new_passphrase(body)
+        if not passphrase:
+            return 400, {"error": why}
+        recovery = vault.create(passphrase, vault.FOLDER)
+        server.vault_key, server.vault_used = vault.unlock(passphrase, vault.FOLDER), time.time()
+        return done("Your vault is ready.", recovery=recovery)
+    if action == "restore":
+        if vault.exists(vault.FOLDER):
+            return 400, {"error": "There is already a vault on this PC, and restoring would replace it."}
+        src = browse(True, title="Choose the folder your vault was backed up to")
+        if not src:
+            return done()
+        vault.restore(src, vault.FOLDER)
+        return done("Your vault is back. It opens with the passphrase or recovery key it had when it was backed up.")
+    if not vault.exists(vault.FOLDER):
+        return 400, {"error": "There is no vault on this PC yet."}
+    if action == "unlock":
+        secret = body.get("secret")
+        if not isinstance(secret, str) or not secret:
+            return 400, {"error": "Type your passphrase or recovery key."}
+        server.vault_key, server.vault_used = vault.unlock(secret, vault.FOLDER), time.time()
+        return done()
+    if action == "backup":
+        dest = browse(True, title="Choose a new, empty folder for the backup (a USB stick or a cloud folder is fine)")
+        if not dest:
+            return done()
+        count = vault.backup(dest, vault.FOLDER)
+        return done(f"Copied the vault ({report.plural(count, 'file')}, still encrypted) to {dest}. "
+                    "It is useless without your passphrase or recovery key.")
+    if not key:
+        return 400, {"error": "The vault locked itself. Open it again with your passphrase.", "locked": True}
+    server.vault_used = time.time()
+    if action == "add":
+        paths = browse(False, multi=True, title="Choose the files to keep in the vault", start=os.path.expanduser("~"))
+        held = vault.names(key, vault.FOLDER)
+        added = []
+        for path in paths:
+            name = os.path.basename(path)
+            if name in held:
+                return done(_added(added, body.get("move")) + f"The vault already holds a file called {name}: "
+                            "rename one of them, then add it again.", ok=False)
+            vault.add(key, path, vault.FOLDER, move=bool(body.get("move")))
+            added.append(name)
+            held[name] = True
+        return done(_added(added, body.get("move")))
+    if action == "take":
+        name = body.get("name")
+        folder = browse(True, title=f"Where should {name} go?") if isinstance(name, str) else ""
+        if not folder:
+            return done()
+        target = os.path.join(folder, os.path.basename(name))
+        if os.path.exists(target):
+            return done(f"{target} already exists, so nothing was written.", ok=False)
+        with open(target, "wb") as f:
+            f.write(vault.get(key, name, vault.FOLDER))
+        return done(f"{name} is in {folder}. It is an ordinary file again: delete it when you are done.")
+    if action == "remove":
+        vault.remove(key, str(body.get("name")), vault.FOLDER)
+        return done(f"{body.get('name')} was removed from the vault for good.")
+    if action == "passphrase":
+        passphrase, why = _new_passphrase(body)
+        if not passphrase:
+            return 400, {"error": why}
+        vault.change_passphrase(key, passphrase, vault.FOLDER)
+        return done("Passphrase changed. The old one no longer opens the vault; your recovery key still does.")
+    if action == "recovery":
+        return done("Your new recovery key is ready. The old one no longer opens the vault.",
+                    recovery=vault.replace_recovery(key, vault.FOLDER))
+    return None
+
+
+def _added(names, move):
+    if not names:
+        return ""
+    gone = " The originals were deleted." if move else " The originals are still where they were: delete them, or add with the delete option."
+    return f"Added {', '.join(names)}.{gone} "
 
 
 def activity(trip):
@@ -182,7 +309,17 @@ class Handler(BaseHTTPRequestHandler):
             return 200, {}
         if path == "/api/bye":
             server.bye = time.time()
+            server.vault_key = None     # the page is gone: lock the vault
             return 200, {}
+        if path == "/api/vault" or path.startswith("/api/vault/"):
+            try:
+                return vault_action(server, path[len("/api/vault/"):] if path != "/api/vault" else "", body)
+            except vault.WrongSecret:
+                return 400, {"error": "That did not open the vault. Check the passphrase and try again."}
+            except KeyError as e:
+                return 400, {"error": str(e.args[0])}
+            except (FileExistsError, ValueError) as e:
+                return 400, {"error": str(e)}
         if path == "/api/check":
             target = body.get("path")
             target = target.strip().strip('"') if isinstance(target, str) else ""
@@ -236,6 +373,11 @@ class Handler(BaseHTTPRequestHandler):
             ok = desktop.set_shortcut(bool(body.get("on")))
             done = "GotchU is in the Start menu and on the desktop." if body.get("on") else "Shortcuts removed."
             return changed(ok, done if ok else "Windows would not change the shortcuts.")
+        if path == "/api/uninstall/plan":
+            return 200, {"steps": uninstall.plan(), "kept": uninstall.kept(), "last": uninstall.LAST_STEP}
+        if path == "/api/uninstall":
+            ok, done, message = uninstall.run()
+            return 200, {"ok": ok, "done": done, "message": message, "status": status()}
         if path == "/api/respond":
             items = exposure.collect()
             # In the window the list of websites is a button on that step, not a command to type.
@@ -274,6 +416,7 @@ def serve(window="tab", path=None, view=None):
     server.token = secrets.token_urlsafe(24)
     server.host = f"127.0.0.1:{server.server_address[1]}"
     server.checked, server.bye, server.seen, server.started = None, 0, 0, time.time()
+    server.vault_key, server.vault_used = None, 0
     query = [f"check={quote(os.path.abspath(path), safe='')}"] if path else []
     query += [f"view={quote(view, safe='')}"] if view else []
     url = f"http://{server.host}/{'?' + '&'.join(query) if query else ''}#{server.token}"

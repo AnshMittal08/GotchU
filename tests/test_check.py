@@ -93,6 +93,14 @@ class CheckTests(unittest.TestCase):
         self.assertEqual([m.name for m in check.members(folder, recursive=False)], ["app.exe"])
         self.assertEqual(len(check.members(folder)), 2)
 
+    def test_a_folder_check_looks_inside_its_zips(self):
+        folder = os.path.join(self.tmp.name, "Downloads")
+        os.makedirs(folder)
+        make_zip(folder, "holiday.zip", {"photo.jpg.exe": b"MZ" + b"\0" * 200})
+        result = check.result(folder)
+        self.assertEqual(result["level"], "danger")
+        self.assertIn("Program disguised as a document: holiday.zip/photo.jpg.exe", [f["title"] for f in result["findings"]])
+
     def test_an_archive_that_cannot_be_opened_is_never_called_clean(self):
         path = os.path.join(self.tmp.name, "photos.7z")
         with open(path, "wb") as f:

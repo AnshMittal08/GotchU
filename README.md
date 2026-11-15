@@ -26,11 +26,11 @@ You need Windows 10 or 11 and Python 3.10 or newer. Nothing else.
 offers one button, "Turn on protection", which can also add GotchU to the Start menu and the desktop.
 After that you open it like any other app and never need a terminal again.
 
-Home says in plain words whether you are protected, shows it on a dial (one ring per protection, lining
-up like a safe's combination), and lists your protection with a switch for each:
+Home says in plain words whether you are protected, shows it on a dial (a padlock in a ring of three arcs,
+one per protection, that clicks shut when all three are on), and lists your protection with a switch for each:
 the theft alarm, cutting the thief off from the internet, the right-click check, and stricter Windows
-settings. From the window you can also check a download, see what to do after a bad click, and see
-what a thief could take. "Check with GotchU" appears in File Explorer's right-click menu (on Windows 11
+settings. From the window you can also check a download, keep key files in the vault, see what to do
+after a bad click, and see what a thief could take. "Check with GotchU" appears in File Explorer's right-click menu (on Windows 11
 under "Show more options"). The window has a light and a dark look.
 
 Everything can still be done from the command line.
@@ -55,6 +55,7 @@ A signed installer is planned.
 | `gotchu respond` | I ran something bad. A checklist of what to do, in order. |
 | `gotchu app` | Opens GotchU in its own window, with all of the above. `gotchu ui` opens the same window as a browser tab. |
 | `gotchu setup` | Installs or removes the small helpers that need administrator rights. |
+| `gotchu uninstall` | Puts back everything GotchU set up, before you remove it. Your vault is kept. |
 
 Every command in detail: [docs/COMMANDS.md](https://github.com/AnshMittal08/GotchU/blob/main/docs/COMMANDS.md)
 
@@ -65,6 +66,18 @@ Every command in detail: [docs/COMMANDS.md](https://github.com/AnshMittal08/Gotc
     gotchu exposure
     gotchu tripwire --on
     gotchu vault create
+
+## Remove GotchU
+
+In the window: Protection, then "Remove GotchU" at the bottom. Or in a terminal:
+
+    gotchu uninstall
+    pip uninstall gotchu
+
+The first line puts back everything GotchU set up (the decoys, the watcher, any internet block, the
+Windows settings it changed, the right-click entry and the shortcuts) and shows each step first.
+Windows asks for permission for the parts that need it. Your vault is kept, because it holds your
+files. The second line removes the program. Removing only the program would leave the watcher running.
 
 ## Promises
 

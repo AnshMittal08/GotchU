@@ -2,6 +2,35 @@
 
 What changed in each release, newest first.
 
+## 0.2.1
+
+- **The vault is in the window.** A Vault page makes the vault, opens it, adds files (and can delete the
+  originals), takes one out, removes one, changes the passphrase, makes a new recovery key, and backs
+  up or restores it. The recovery key is shown once, until you tick that you have written it down. An
+  open vault locks itself after 5 quiet minutes and when the window closes; a passphrase is never
+  kept. Running a command with a key (`vault use`) stays in the terminal.
+- **Removing GotchU.** `gotchu uninstall`, or "Remove GotchU" at the bottom of Protection in the window,
+  puts back everything GotchU set up: the theft alarm and its decoys, any internet block, Windows'
+  file-audit setting, every stricter Windows setting GotchU changed, the helpers in Program Files, the
+  right-click entry, the shortcuts and the check at sign-in. It shows each step before doing anything.
+  Your vault is never deleted. Then `pip uninstall gotchu` removes the program itself.
+- Checking a folder now looks inside the zip files in it, as if each one had been checked on its own.
+  Before, a folder of zips was only "could not look inside".
+- `gotchu vault get --to` accepts a folder.
+- **Fix: GotchU could still list itself as a program to review.** Two GotchU processes noting their own
+  reads at the same moment could wipe each other's notes, and only the last 61 were kept, so older
+  reads by GotchU came back as suspicious. Notes are now written safely, one writer at a time, and kept
+  for 400 days instead of by count.
+- **Fix:** the list of decoys, and the window's settings, are written in one step. A crash or power cut
+  mid-write can no longer leave half a file (which could have made GotchU forget its own decoys).
+- The dial is redrawn: a padlock in a ring of three arcs, one per protection, each named. An arc fills in
+  green when its protection is on and breathes amber while it is off. The padlock stays open until all
+  three are on, then clicks shut; it is red during an alarm. The turning sphere, the safe-combination
+  rings and the 24-hour rim are gone (times are in Activity).
+- **Fix: the window's pages could not be scrolled.** Anything below the first screen (most of Protection,
+  the checklist, History) could not be reached. Every page now scrolls.
+- "1 files" now reads "1 file".
+
 ## 0.2.0
 
 GotchU is now an app with its own window. After the first run you do not need a terminal.

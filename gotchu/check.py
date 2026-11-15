@@ -51,6 +51,7 @@ class Member:
         self._reader = reader
         self.encrypted = encrypted      # locked with a password: only its name and size can be seen
         self.damaged = damaged          # could not be read
+        self.top = "/" not in self.name     # at the top of the download (or of a zip found in a checked folder)
 
     def read(self, n=-1):
         return self._reader(n)
@@ -96,6 +97,18 @@ def _dir_members(path, recursive=True):
             dirs[:] = []
         for fn in files:
             full = os.path.join(root, fn)
+            if fn.lower().endswith(".zip"):
+                # A folder of downloads is mostly zips: look inside each one, as if it had been checked on its own.
+                try:
+                    inner = list(_zip_members(full))
+                except READ_ERRORS:
+                    inner = None    # listed below as the zip itself, which is then named as not looked inside
+                if inner is not None:
+                    prefix = os.path.relpath(full, path).replace("\\", "/") + "/"
+                    for m in inner:
+                        m.name = prefix + m.name
+                        yield m
+                    continue
 
             def reader(n, full=full):
                 with open(full, "rb") as f:
@@ -216,7 +229,7 @@ def analyse(path, recursive=True):
         if m.ext == ".lnk":
             add(HIGH, f"Shortcut file inside the download: {m.name}",
                 "Shortcuts can silently run commands; real software rarely ships them inside an archive.")
-        elif m.ext in SCRIPT_EXT and "/" not in m.name:
+        elif m.ext in SCRIPT_EXT and m.top:
             add(MEDIUM, f"Script at the top of the download: {m.name}",
                 "Scripts run commands on your PC. Read it, or ask someone who can, before running.")
 
@@ -232,7 +245,7 @@ def analyse(path, recursive=True):
             add(HIGH, f"Encrypted, unreadable file: {m.name}",
                 "Scrambled data in an unusual file type, next to other tricks - a common way to hide the real malware.")
     elif blobs:
-        add(INFO, f"{len(blobs)} unreadable data files (normal for many apps)",
+        add(INFO, f"{report.plural(len(blobs), 'unreadable data file')} (normal for many apps)",
             ", ".join(m.name for m in blobs[:4]) + (" ..." if len(blobs) > 4 else ""))
     if engine and (padding or blobs):
         add(HIGH, "Game engine used as a wrapper",
@@ -273,7 +286,7 @@ def analyse(path, recursive=True):
             "The programs are locked with a password, so neither gotchu nor antivirus can look inside - a common "
             "way to get malware past scanners, with the password in the message or the file name. Locked: " + _names(risky))
     elif locked:
-        add(MEDIUM, f"Password-protected archive: {len(locked)} files could not be checked",
+        add(MEDIUM, f"Password-protected archive: {report.plural(len(locked), 'file')} could not be checked",
             "Their contents are locked with a password. Their names were still checked. Locked: " + _names(locked))
     if closed:
         add(MEDIUM, f"{CLOSED_TITLE}: {_names(closed)}",
@@ -289,7 +302,7 @@ def analyse(path, recursive=True):
             "Unreadable: " + _names(damaged))
 
     programs = [m for m in items if m.ext in PROGRAM_EXT]
-    add(INFO, f"{len(items)} files, {len(programs)} programs",
+    add(INFO, f"{report.plural(len(items), 'file')}, {report.plural(len(programs), 'program')}",
         ", ".join(m.name for m in programs[:8]) + (" ..." if len(programs) > 8 else ""))
     return findings
 

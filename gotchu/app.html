@@ -7,8 +7,9 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect width='96' height='96' rx='21' fill='%2314171A'/%3E%3Cpath d='M65.2 28.8A27 27 0 1 0 74 48' fill='none' stroke='%23F2F3F4' stroke-width='10' stroke-linecap='round'/%3E%3Ccircle cx='55.5' cy='48' r='7.4' fill='%23FFB224'/%3E%3C/svg%3E">
 <style>
   /* The house style, in four rules.
-     1. The dial. "GotchU guards the safe", so status is a safe's dial: one ring per protection, and the
-        rings line up at the top when you are protected. Its rim is a 24-hour clock that plots what happened.
+     1. The dial. A padlock inside one ring cut into three arcs, one per protection. An arc fills in green
+        when its protection is on (a light runs along it: it is watching) and breathes amber while it is off.
+        When all three are on, the padlock clicks shut. Red during an alarm.
      2. The ring glyph. Every state in the app is the same small mark: closed ring = on, open ring = off,
         ring with a caught dot = alarm. It is also the logo.
      3. Ink, paper and one amber. Amber means "GotchU wants you to act here". Green and red are only states.
@@ -36,8 +37,9 @@
   :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
   h1, h2, h3 { font-family: var(--head); font-weight: 600; margin: 0; letter-spacing: .005em; }
 
-  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); height: 100%; }
-  .nav { background: var(--nav); border-right: 1px solid var(--line); padding: 18px 12px 14px; display: flex; flex-direction: column; gap: 18px; }
+  /* The window is exactly the screen's height; only .page (and a short window's menu) scrolls inside it. */
+  .app { display: grid; grid-template-columns: 216px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; }
+  .nav { background: var(--nav); border-right: 1px solid var(--line); padding: 18px 12px 14px; display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow-y: auto; scrollbar-width: none; }
   .brand { all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 2px 8px; font: 600 23px/1 var(--head); }
   .brand svg { width: 24px; height: 24px; }
   .nav nav { display: grid; gap: 2px; }
@@ -52,7 +54,7 @@
   .seg button { all: unset; cursor: pointer; text-align: center; padding: 4px 0; border-radius: 5px; font-size: 13px; font-weight: 600; color: var(--soft); }
   .seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
 
-  main { min-width: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+  main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
   .bar { height: 56px; padding: 0 24px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); }
   .bar h1 { font-size: 21px; margin-right: auto; }
   .badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 13.5px; font-weight: 600; }
@@ -82,6 +84,7 @@
   .status h2 { font-size: 27px; line-height: 1.1; }
   .status h2.bad { color: var(--bad); }
   .status p { margin: 8px 0 14px; color: var(--soft); }
+  .rows code { font: 500 13px/1.4 Consolas, monospace; background: var(--line); padding: 1px 6px; border-radius: 5px; user-select: all; }
   .status code { display: block; margin: -6px 0 14px; font: 500 12.5px/1.4 Consolas, monospace; color: var(--soft); overflow-wrap: anywhere; }
   .legend { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, auto); justify-content: space-between; font-size: 12.5px; color: var(--soft); }
   .legend b { display: block; font: 600 20px/1.1 var(--head); color: var(--text); }
@@ -126,6 +129,17 @@
   .filechip { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 3px 10px 3px 4px; border: 1px solid var(--line); border-radius: 6px; font-size: 13.5px; font-weight: 600; max-width: 100%; }
   .filechip i { font-style: normal; font-size: 10.5px; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; background: var(--raised); color: var(--soft); }
   .stack { display: grid; gap: 14px; }
+  .form { display: grid; gap: 12px; padding: 4px 16px 16px; justify-items: start; }
+  .form.inline { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .rows .form { padding: 8px 0 4px; }
+  .form .acts { display: flex; gap: 10px; }
+  .form small { color: var(--soft); font-size: 12.5px; max-width: 70ch; }
+  .field { display: grid; gap: 5px; width: min(380px, 100%); font-size: 13.5px; font-weight: 600; }
+  .field input { font: 500 15px/1.4 var(--body); color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; }
+  .field input:focus { outline: 2px solid var(--amber); outline-offset: 1px; border-color: transparent; }
+  .tick { display: flex; gap: 9px; align-items: center; cursor: pointer; font-size: 14px; }
+  .tick input { width: 17px; height: 17px; accent-color: var(--amber); }
+  .recovery { font: 600 clamp(17px, 2.2vw, 23px)/1.3 Consolas, monospace; letter-spacing: .06em; padding: 14px 18px; border: 1.5px dashed var(--amber); border-radius: 10px; user-select: all; overflow-wrap: anywhere; }
   .meter { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; margin: 2px 0 14px; }
   .meter i { display: block; height: 100%; width: 0; background: var(--amber); transition: width .25s; }
   .meter.busy i { width: 30%; animation: slide 1.1s linear infinite; }
@@ -172,6 +186,7 @@
       <button data-go="home"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.500"/><path d="M15.600 5.200A7.500 7.500 0 1 0 17.500 10"/></svg>Home</button>
       <button data-go="check"><svg viewBox="0 0 20 20"><path d="M5.500 2.500h6l3.500 3.500v3.500M5.500 2.500v15h3.500"/><circle cx="13.500" cy="14" r="2.800"/><path d="M15.600 16.200l2 2"/></svg>Check a download</button>
       <button data-go="protect"><svg viewBox="0 0 20 20"><path d="M10 2.500l6.500 2.500v5c0 4-2.800 6.600-6.500 7.500-3.700-.900-6.500-3.500-6.500-7.500V5z"/><path d="M7.200 10l2 2 3.700-3.800"/></svg>Protection</button>
+      <button data-go="vault"><svg viewBox="0 0 20 20"><rect x="4" y="8.500" width="12" height="9" rx="1.800"/><path d="M6.800 8.500V6.200a3.200 3.200 0 0 1 6.400 0v2.300M10 12.300v2"/></svg>Vault</button>
       <button data-go="hacked"><svg viewBox="0 0 20 20"><path d="M7.800 3h4.400v4.800H17v4.400h-4.800V17H7.800v-4.800H3V7.800h4.800z"/></svg>I think I was hacked</button>
       <hr>
       <button data-go="thief"><svg viewBox="0 0 20 20"><path d="M1.500 10S4.800 4.200 10 4.200 18.500 10 18.500 10 15.200 15.800 10 15.800 1.500 10 1.500 10z"/><circle cx="10" cy="10" r="2.400"/></svg>What a thief sees</button>
@@ -262,8 +277,9 @@
   const glyph = (state) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"), u = document.createElementNS("http://www.w3.org/2000/svg", "use");
                              s.setAttribute("class", "glyph"); u.setAttribute("href", "#g-" + state); s.append(u); return s; };
   const root = document.documentElement;
-  const S = { st: null, locks: null, mode: "home", check: null, scanning: false, busy: false, report: null, steps: null, done: [], sites: null, problem: "", hover: -1 };
-  const TITLES = { home: "Home", check: "Check a download", protect: "Protection", hacked: "I think I was hacked", thief: "What a thief sees", scan: "Scan this PC", log: "History" };
+  const S = { st: null, locks: null, mode: "home", check: null, scanning: false, busy: false, report: null, steps: null, done: [], sites: null, problem: "", hover: -1, remove: null, removed: null,
+              vault: null, vf: {}, vopen: "", recovery: "", saw: false };   // vf: what is typed in the vault's forms, wiped after each use
+  const TITLES = { home: "Home", check: "Check a download", protect: "Protection", vault: "Vault", hacked: "I think I was hacked", thief: "What a thief sees", scan: "Scan this PC", log: "History" };
   const REPORTS = { scan: ["/api/scan", "Scanning this PC", "Looking at what is running and what starts with Windows. This takes a few seconds."],
                     thief: ["/api/exposure", "Counting what is here", "Looking where a password thief looks. Nothing is opened, copied or shown."],
                     log: ["/api/tripwire/log", "Reading the history", "Alarms, and programs other than the owner that read your logins."] };
@@ -340,10 +356,12 @@
     if (shortcut && !S.st.shortcut) await act("/api/shortcut", { on: true }, "Adding GotchU to the Start menu.");
   }
   function go(mode) {
-    S.mode = mode; S.scanning = false; S.sites = null;
+    S.mode = mode; S.scanning = false; S.sites = null; S.remove = null;
     if (mode === "check") S.check = null;
     if (REPORTS[mode]) loadReport(mode);
     if (mode === "hacked") loadSteps();
+    if (mode === "vault") loadVault();
+    S.vf = {}; S.vopen = "";
     if (mode === "home" || mode === "check") refresh();
     render();
   }
@@ -418,7 +436,33 @@
                       toggle(k.on, k.name, () => act("/api/lock", { key: k.key, undo: k.on }, UAC), k.on && !k.can_undo)));
     }
     out.push(panel("Stricter Windows settings", "optional: each has a catch, and GotchU can put each back exactly as it was", mine), panel("Only Windows can change these", "", theirs));
+    out.push(removePanel());
     return out;
+  }
+  // Removing GotchU: say exactly what will be put back before anything is done, and keep the vault.
+  function removePanel() {
+    const ul = el("ul", "rows");
+    if (S.removed) {
+      ul.append(...S.removed.done.map((t) => row("on", t, null)));
+      ul.append(row(S.removed.ok ? "info" : "warn", S.removed.ok ? "Last step" : "Not finished", S.removed.ok
+        ? ["Close this window, then type this in a terminal: ", el("code", "", S.removed.last)] : S.removed.message));
+      if (S.removed.kept) ul.append(row("info", "Kept", S.removed.kept));
+      return panel("Remove GotchU", S.removed.ok ? "everything GotchU set up has been put back" : "", ul);
+    }
+    if (!S.remove) {
+      ul.append(row(null, "Remove GotchU from this PC", "Puts back everything GotchU set up, and shows you each step first. Your vault is kept.",
+        button("Remove…", "", async () => { try { S.remove = await api("/api/uninstall/plan", {}); render(); } catch (e) { toast(e.message, false, true); } })));
+      return panel("Remove GotchU", "", ul);
+    }
+    const steps = S.remove.steps, prompts = steps.filter((s) => s.admin).length;
+    if (!steps.length) ul.append(row("on", "Nothing to put back", ["GotchU has nothing set up on this PC. To remove the program itself, type this in a terminal: ", el("code", "", S.remove.last)]));
+    else ul.append(...steps.map((s) => row(null, s.text, s.admin ? "Windows asks for your permission." : null)));
+    if (S.remove.kept) ul.append(row("info", "Kept", S.remove.kept));
+    const go = steps.length ? [button("Remove GotchU", "bad", async () => {
+      const r = await act("/api/uninstall", {}, prompts ? "Removing GotchU. Windows will ask for your permission " + prompts + (prompts === 1 ? " time" : " times") + ". Choose Yes each time." : "Removing GotchU.");
+      if (r) { S.removed = { ...r, kept: S.remove.kept, last: S.remove.last }; render(); } })] : [];
+    ul.append(row(null, steps.length ? "Go ahead?" : "", null, [...go, button(steps.length ? "Cancel" : "Close", "", () => { S.remove = null; render(); })]));
+    return panel("Remove GotchU", "this is what will happen", ul);
   }
   function stepsPage() {
     if (S.sites) { const ul = el("ul", "sites"); ul.append(...S.sites.map((s) => el("li", "", s)));
@@ -485,6 +529,90 @@
     return [...(main.length ? [findings(main, "What GotchU found", main.length === 1 ? "1 thing" : main.length + " things")] : []), findings(info, "What it looked at", "")];
   }
 
+  /* ---------- Vault ---------- */
+  async function loadVault() {
+    try { S.vault = (await api("/api/vault", {})).vault; } catch (e) { toast(e.message, false, true); }
+    render();
+  }
+  // One vault action. What was typed is wiped whatever the answer, so a passphrase never stays on the page.
+  async function vaultAct(action, body, waiting) {
+    S.vf = {};
+    const r = await act("/api/vault/" + action, body || {}, waiting);
+    if (r && r.vault) { S.vault = r.vault; S.vopen = ""; }
+    if (r && r.recovery) { S.recovery = r.recovery; S.saw = false; }
+    if (!r) loadVault();    // refused, or the vault locked itself meanwhile: show how things are now
+    else render();
+  }
+  function field(key, label, onEnter, type) {
+    const w = el("label", "field"), i = el("input");
+    i.type = type || "password"; i.autocomplete = "off"; i.spellcheck = false; i.value = S.vf[key] || ""; i.dataset.key = key;
+    i.disabled = S.busy;    // nothing typed mid-request can mix with the wipe that follows it
+    i.addEventListener("input", () => (S.vf[key] = i.value));
+    i.addEventListener("keydown", (e) => { if (e.key === "Enter") onEnter(); });
+    w.append(el("span", "", label), i); return w;
+  }
+  function form(fields, buttons, note) {
+    const f = el("div", "form"); f.append(...fields);
+    const a = el("div", "acts"); a.append(...buttons); f.append(a);
+    if (note) f.append(el("small", "", note));
+    return f;
+  }
+  const PICKING = "Choose in the window that has just opened. It may be behind this one.";
+  function vaultPage() {
+    const v = S.vault;
+    if (!v) { lead("Opening the vault", "", []); return []; }
+    if (S.recovery) {     // shown once: the only way in besides the passphrase
+      lead("Write down your recovery key", "If you forget your passphrase, this key is the only other way in. It is shown only this once, and GotchU does not keep a copy you can read.", []);
+      const box = el("div", "form"), key = el("code", "recovery", S.recovery), tick = el("label", "tick"), c = el("input");
+      c.type = "checkbox"; c.checked = S.saw; c.addEventListener("change", () => { S.saw = c.checked; render(); });
+      tick.append(c, " I have written it on paper, away from this PC");
+      const a = el("div", "acts"); a.append(button("Continue", "go", () => { S.recovery = ""; S.saw = false; render(); }));
+      a.firstChild.disabled = !S.saw || S.busy;
+      box.append(key, tick, a, el("small", "", "Lose both the passphrase and this key, and the files in the vault are gone for good. Not a photo, not a file on this PC: a thief would find those."));
+      return [panel("Recovery key", "", box)];
+    }
+    if (!v.exists) {
+      lead("Keep key files where a thief cannot use them", "Files in the vault are encrypted with a passphrase only you know. A thief who copies them gets noise. Good for SSH and server keys, recovery codes, wallet backups and .env files.", []);
+      const create = () => vaultAct("create", { passphrase: S.vf.p1 || "", again: S.vf.p2 || "" }, "Making your vault.");
+      setTimeout(focusField);
+      return [panel("Make your vault", "", form([field("p1", "Choose a passphrase", create), field("p2", "Type it again", create)],
+                     [button("Make the vault", "go", create)], "At least 10 characters. A few random words work well. Next you will get a recovery key to write down.")),
+              panel("Have a backup?", "", form([], [button("Restore from a backup…", "", () => vaultAct("restore", {}, PICKING))], "Brings a vault you backed up onto this PC. It opens with the passphrase it had then."))];
+    }
+    if (!v.unlocked) {
+      lead("Your vault is locked", "Open it with your passphrase, or with your recovery key if you have forgotten it.", []);
+      const open = () => vaultAct("unlock", { secret: S.vf.s || "" }, "Opening the vault. This takes a second.");
+      setTimeout(focusField);
+      return [panel("Open the vault", "", form([field("s", "Passphrase or recovery key", open)], [button("Open", "go", open)],
+                    "It locks itself after " + Math.round(v.idle / 60) + " quiet minutes, and when you close GotchU."))];
+    }
+    lead("Your vault is open", "It locks itself after " + Math.round(v.idle / 60) + " quiet minutes, and when you close GotchU.", [button("Lock now", "", () => vaultAct("lock"))], "ok");
+    const list = el("ul", "rows");
+    if (!v.files.length) list.append(el("span", "none", "Nothing in it yet. Add your key files below."));
+    for (const f of v.files) {
+      const end = S.vopen === "rm:" + f.name
+        ? [el("span", "", "Remove for good?"), button("Remove", "bad", () => vaultAct("remove", { name: f.name }, "Removing it.")), button("Cancel", "", () => { S.vopen = ""; render(); })]
+        : [button("Take out…", "", () => vaultAct("take", { name: f.name }, PICKING)), button("Remove", "", () => { S.vopen = "rm:" + f.name; render(); })];
+      list.append(row("on", f.name, f.size == null ? "" : size(f.size), end));
+    }
+    const move = el("label", "tick"), mv = el("input"); mv.type = "checkbox"; mv.checked = !!S.vf.move; mv.addEventListener("change", () => (S.vf.move = mv.checked));
+    move.append(mv, " Delete the originals once they are safely in the vault");
+    const adder = el("div", "form inline"); adder.append(button("Add files…", "go", () => vaultAct("add", { move: !!S.vf.move }, PICKING)), move);
+    const files = panel(v.files.length === 1 ? "1 file" : v.files.length + " files", "encrypted on this PC", list); files.append(adder);
+
+    const safe = el("ul", "rows"), change = () => vaultAct("passphrase", { passphrase: S.vf.p1 || "", again: S.vf.p2 || "" }, "Changing the passphrase.");
+    if (S.vopen === "pass") { safe.append(row(null, "Change the passphrase", form([field("p1", "New passphrase", change), field("p2", "Type it again", change)],
+                                       [button("Change it", "go", change), button("Cancel", "", () => { S.vopen = ""; S.vf = {}; render(); })]))); setTimeout(focusField); }
+    else safe.append(row(null, "Change the passphrase", "The files are not touched. Your recovery key keeps working.", button("Change…", "", () => { S.vopen = "pass"; render(); })));
+    safe.append(row(null, "Make a new recovery key", S.vopen === "rec" ? "The old one stops working at once." : "If the one you wrote down may have been seen or lost.",
+      S.vopen === "rec" ? [button("Make a new one", "bad", () => vaultAct("recovery", {}, "Making a new recovery key.")), button("Cancel", "", () => { S.vopen = ""; render(); })]
+                        : button("Make new…", "", () => { S.vopen = "rec"; render(); })));
+    safe.append(row(null, "Back up the vault", "Copies it, still encrypted, to a new or empty folder. A USB stick or a cloud folder is fine.",
+      button("Back up…", "", () => vaultAct("backup", {}, PICKING))));
+    return [files, panel("Keep it safe", "", safe)];
+  }
+  function focusField() { const i = document.querySelector("#p-body .field input"); if (i && !document.activeElement.closest(".field")) i.focus(); }
+
   /* ---------- render ---------- */
   function render() {
     const lv = level(), st = S.st, off = missing(), home = S.mode === "home";
@@ -497,7 +625,7 @@
     if (st) {
       $("version").textContent = "Version " + st.version + ". Runs only on this PC.";
       $("shortcut").hidden = false; $("shortcut").textContent = st.shortcut ? "Remove shortcuts" : "Add to Start menu";
-      $("veil").hidden = st.welcomed || !home || S.busy || !!st.tripwire.alert;      // an alarm comes first
+      $("veil").hidden = st.welcomed || !home || S.busy || !!st.tripwire.alert || !!S.removed;      // an alarm comes first
       $("hello-go").textContent = off ? "Turn on protection" : "Got it";
     }
     if (home) {
@@ -514,6 +642,7 @@
     let parts = [];
     if (S.mode === "check") { parts = checkPage(); if (S.scanning) { meter.hidden = false; meter.classList.add("busy"); } }
     else if (S.mode === "protect") { lead("Your protection", "Each switch says what it does and what the catch is. Anything you switch on here can be switched off again.", []); parts = st ? protectPage() : []; }
+    else if (S.mode === "vault") parts = vaultPage();
     else if (S.mode === "hacked") {
       const n = S.steps ? S.steps.filter((s) => S.done.includes(s.title)).length : 0, all = S.steps ? S.steps.length : 0;
       lead("Do these, in this order", (S.advice ? S.advice.replace(/^gotchu/, "GotchU") + " " : "") + (all ? n + " of " + all + " done." : ""),
@@ -554,11 +683,9 @@
 
   /* ---------- the dial ---------- */
   const cv = $("dial"), g = cv.getContext("2d"), still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const pts = [], N = 380;
-  for (let i = 0; i < N; i++) { const y = 1 - 2 * (i + .5) / N, r = Math.sqrt(1 - y * y), th = i * 2.399963; pts.push([Math.cos(th) * r, y, Math.sin(th) * r]); }
-  const RADII = [.66, .555, .45], AWAY = [.95, -1.35, 2.2], turn = [AWAY[0], AWAY[1], AWAY[2]], lit = [0, 0, 0];
-  let heat = 0, ready = 0;
-  const hourAngle = (date) => (date.getHours() + date.getMinutes() / 60) / 24 * Math.PI * 2 - Math.PI / 2;
+  const NAMES = ["Alarm", "Cut off", "Right-click"], fill = [0, 0, 0];
+  const ARC = (i) => [-Math.PI / 2 + (i - .5) * Math.PI * 2 / 3 + .1, -Math.PI / 2 + (i + .5) * Math.PI * 2 / 3 - .1];
+  let ready = 0, shut = 0, swing = 0, click = 0, landed = false;
   const css = (name) => getComputedStyle(root).getPropertyValue(name).trim();
   function frame(now) {
     const box = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1), size = Math.min(box.width, box.height);
@@ -566,54 +693,52 @@
       if (cv.width !== Math.round(box.width * d) || cv.height !== Math.round(box.height * d)) { cv.width = Math.round(box.width * d); cv.height = Math.round(box.height * d); }
       g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, box.width, box.height);
       const C = { text: css("--text"), soft: css("--soft"), faint: css("--faint"), line: css("--line"), amber: css("--amber-text"), ok: css("--ok"), bad: css("--bad") };
-      const X = box.width / 2, Y = box.height / 2, R = size / 2 - 2, t = now / 1000, st = S.st, r = core(), caught = !!(st && st.tripwire.alert), k = still ? 1 : .08;
-      for (let i = 0; i < 3; i++) { turn[i] += ((r[i] === true ? 0 : AWAY[i]) - turn[i]) * k; lit[i] += ((r[i] === true ? 1 : 0) - lit[i]) * k; }
-      heat += ((caught ? 1 : 0) - heat) * k; ready += ((st ? 1 : 0) - ready) * k;
-      const arc = (rad, a0, a1, col, lw, dash) => { g.beginPath(); g.setLineDash(dash || []); g.arc(X, Y, rad * R, a0, a1); g.strokeStyle = col; g.lineWidth = lw; g.stroke(); g.setLineDash([]); };
+      const X = box.width / 2, Y = box.height / 2, R = size / 2 - 2, t = now / 1000, st = S.st, r = core(), caught = !!(st && st.tripwire.alert);
+      const pulse = still ? .5 : .5 + .5 * Math.sin(t * 3), base = .35 + .65 * ready;
+      ready += ((st ? 1 : 0) - ready) * (still ? 1 : .08);
+      // each arc fills in once its protection is on, one after the other around the ring
+      for (let i = 0; i < 3; i++) { const next = r[i] === true && (i === 0 || r[i - 1] !== true || fill[i - 1] > .85); fill[i] += ((next ? 1 : 0) - fill[i]) * (still ? 1 : .045); }
+      const locked = fill[0] > .95 && fill[1] > .95 && fill[2] > .95;
+      if (still) shut = locked ? 1 : 0; else { swing = (swing + ((locked ? 1 : 0) - shut) * .2) * .7; shut += swing; }   // a spring: the shackle bounces as it shuts
+      if (shut > .95 && !landed && !still) click = 1;                     // the click: one ripple as it lands
+      landed = shut > .95 || (landed && shut > .5); click = Math.max(0, click - .025);
+      const arc = (a0, a1, col, lw) => { g.beginPath(); g.arc(X, Y, .8 * R, a0, a1); g.strokeStyle = col; g.lineWidth = lw; g.stroke(); };
       const at = (rad, a) => [X + Math.cos(a) * rad * R, Y + Math.sin(a) * rad * R];
 
-      // the rim: a 24-hour clock
-      for (let i = 0; i < 96; i++) { const a = i / 96 * Math.PI * 2 - Math.PI / 2, major = i % 4 === 0, six = i % 24 === 0, p = at(1, a), q = at(six ? .9 : major ? .935 : .96, a);
-        g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.strokeStyle = six ? C.soft : major ? C.faint : C.line; g.lineWidth = six ? 1.6 : 1; g.stroke(); }
-      g.fillStyle = C.soft; g.font = "600 10.5px Barlow, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
-      [["00", -Math.PI / 2], ["06", 0], ["12", Math.PI / 2], ["18", Math.PI]].forEach(([n, a]) => { const p = at(.83, a); g.fillText(n, p[0], p[1]); });
-      if (st) {                                                           // what happened in the last 24 hours, plotted at its time
-        const day = Date.now() - 864e5;
-        for (const m of st.marks) { const when = new Date(m.time); if (isNaN(when) || when < day) continue;
-          const p = at(.875, hourAngle(when)), alarm = m.kind === "alarm"; g.beginPath(); g.arc(p[0], p[1], alarm ? 3.2 : 2, 0, 7); g.fillStyle = alarm ? C.bad : C.faint; g.fill(); }
-        const n = at(1, hourAngle(new Date())), n2 = at(.9, hourAngle(new Date()));                  // now
-        g.beginPath(); g.moveTo(n[0], n[1]); g.lineTo(n2[0], n2[1]); g.strokeStyle = C.amber; g.lineWidth = 2; g.stroke();
-      }
-
-      // the optional ring: one segment per stricter Windows setting
-      const locks = strict() || [null, null, null, null];
-      locks.forEach((lock, i) => { const a0 = i / locks.length * Math.PI * 2 - Math.PI / 2 + .05, a1 = (i + 1) / locks.length * Math.PI * 2 - Math.PI / 2 - .05, on = lock && lock.on;
-        arc(.76, a0, a1, on ? C.soft : C.line, on ? 2.5 : 1.5, on ? null : [2, 4]); });
-
-      // the three tumblers: on = solid, turned so its notch sits at the top
+      // the ring: one arc per protection, named inside it
+      g.lineCap = "round"; g.font = "600 10.5px Barlow, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
       for (let i = 0; i < 3; i++) {
-        const on = lit[i], hot = caught && i === 0, col = hot ? C.bad : on > .5 ? C.text : C.faint, lw = (on > .5 ? 3 : 2) + (S.hover === i ? 1.5 : 0);
-        g.globalAlpha = .35 + .65 * ready; arc(RADII[i], 0, Math.PI * 2, S.hover === i && !hot ? C.amber : col, lw, on > .5 ? null : [3, 5]); g.globalAlpha = 1;
-        const a = -Math.PI / 2 + turn[i], p = at(RADII[i], a);
-        g.beginPath(); g.arc(p[0], p[1], 4.5, 0, 7); g.fillStyle = css("--panel"); g.fill();
-        g.beginPath(); g.arc(p[0], p[1], 3.2, 0, 7);
-        if (on > .5) { g.fillStyle = hot ? C.bad : C.ok; g.fill(); } else { g.strokeStyle = r[i] === false ? C.amber : C.faint; g.lineWidth = 1.6; g.stroke(); }
+        const [a0, a1] = ARC(i), hot = caught && i === 0, w = .075 * R + (S.hover === i ? 3 : 0);
+        g.globalAlpha = base; arc(a0, a1, C.line, w);                                      // the track
+        if (r[i] === false && !hot) { g.globalAlpha = base * (.3 + .45 * pulse); arc(a0, a1, C.amber, w); }   // off: breathes amber, act here
+        g.globalAlpha = base;
+        if (fill[i] > .01) arc(a0, a0 + (a1 - a0) * fill[i], hot ? C.bad : C.ok, w);      // on: filled in, clockwise
+        if (hot) { g.globalAlpha = .45 * (1 - pulse); arc(a0, a1, C.bad, w + 9 * pulse); } // caught: the alarm's arc throbs
+        else if (fill[i] > .95 && !still) {                                                // on: a light runs along it, watching
+          const p = (t * .35 + i / 3) % 1, a = a0 + (a1 - a0) * p;
+          g.globalAlpha = .7 * Math.sin(p * Math.PI); arc(Math.max(a0, a - .3), a, "#fff", w * .4);
+        }
+        const m = at(.57, (a0 + a1) / 2); g.globalAlpha = base;
+        g.fillStyle = hot ? C.bad : r[i] === false ? C.amber : C.soft; g.fillText(NAMES[i], m[0], m[1]);
       }
-      if (lit[0] > .9 && lit[1] > .9 && lit[2] > .9 && !caught) {         // all three lined up
-        const p = at(.71, -Math.PI / 2), q = at(.4, -Math.PI / 2); g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.strokeStyle = C.ok; g.lineWidth = 1.2; g.setLineDash([2, 3]); g.stroke(); g.setLineDash([]);
-      }
-      if (heat > .05 && st.tripwire.alert) {                              // the alarm: from the time it happened, in to the ring that caught it
-        const a = hourAngle(new Date(st.tripwire.alert.time)), p = at(.875, a), q = at(RADII[0], a), pulse = still ? .5 : .5 + .5 * Math.sin(t * 4);
-        g.globalAlpha = heat; g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.strokeStyle = C.bad; g.lineWidth = 1.6; g.stroke();
-        g.beginPath(); g.arc(q[0], q[1], 5, 0, 7); g.fillStyle = C.bad; g.fill();
-        g.beginPath(); g.arc(q[0], q[1], 8 + 5 * pulse, 0, 7); g.strokeStyle = C.bad; g.lineWidth = 1.2; g.globalAlpha = heat * (1 - pulse * .7); g.stroke(); g.globalAlpha = 1;
-      }
+      g.lineCap = "butt";
+      if (click > 0) { g.globalAlpha = click * .6; g.beginPath(); g.arc(X, Y, (.22 + (1 - click) * .5) * R, 0, 7); g.strokeStyle = C.ok; g.lineWidth = 2; g.stroke(); }
 
-      // the middle: what you own, turning slowly
-      const ry = still ? .6 : t * .18, rx = .38, cy = Math.cos(ry), sy = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx), G = R * .3;
-      g.fillStyle = caught ? C.bad : C.text;
-      for (const q of pts) { const x1 = q[0] * cy + q[2] * sy, z1 = -q[0] * sy + q[2] * cy, y1 = q[1] * cx - z1 * sx, z2 = q[1] * sx + z1 * cx, near = 1 - (z2 + 1) / 2;
-        g.globalAlpha = (.12 + .7 * near) * (.4 + .6 * ready); const s = .9 + 1.1 * near; g.fillRect(X + x1 * G - s / 2, Y + y1 * G - s / 2, s, s); }
+      // the middle: the padlock. Open (and bobbing) until all three arcs are in, then it clicks shut. Red in an alarm, shaking now and then.
+      const col = caught ? C.bad : shut > .5 ? C.ok : C.amber, u = R;
+      const x = X + (caught && !still && t % 2.4 < .4 ? Math.sin(t * 55) * .014 * u : 0);
+      const bob = still ? 0 : Math.max(0, 1 - shut) * Math.sin(t * 2.2) * .012 * u;
+      const bw = .3 * u, bh = .22 * u, top = Y - .04 * u, legs = .095 * u, lift = (1 - shut) * .085 * u + bob;
+      g.globalAlpha = base;
+      g.beginPath();                                                      // the shackle: a U standing on the body
+      g.moveTo(x - legs, top + .02 * u); g.lineTo(x - legs, top - .08 * u - lift);
+      g.arc(x, top - .08 * u - lift, legs, Math.PI, 0);
+      g.lineTo(x + legs, top + .02 * u - lift - (1 - shut) * .03 * u);    // open: this leg stands clear of the body
+      g.strokeStyle = col; g.lineWidth = .045 * u; g.lineCap = "round"; g.stroke(); g.lineCap = "butt";
+      g.beginPath(); g.roundRect(x - bw / 2, top, bw, bh, .035 * u); g.fillStyle = col; g.fill();
+      g.fillStyle = css("--panel");                                       // the keyhole, cut out of the body
+      g.beginPath(); g.arc(x, top + bh * .42, .03 * u, 0, 7); g.fill();
+      g.beginPath(); g.roundRect(x - .012 * u, top + bh * .42, .024 * u, .07 * u, .008 * u); g.fill();
       g.globalAlpha = 1;
     }
     requestAnimationFrame(frame);

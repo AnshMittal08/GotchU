@@ -43,14 +43,7 @@ def load_state(path=None):
 
 
 def save_state(path=None, **changes):
-    path = path or STATE
-    state = {**load_state(path), **changes}
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(state, f)
-    os.replace(tmp, path)
-    return state
+    return report.update_json(path or STATE, lambda saved: {**(saved if isinstance(saved, dict) else {}), **changes}, {})
 
 
 def note_scan(result):
